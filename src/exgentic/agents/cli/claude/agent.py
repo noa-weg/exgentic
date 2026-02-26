@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) 2026, The Exgentic organization and its contributors.
+
+from __future__ import annotations
+
+import os
+from typing import Any, ClassVar, Dict, List
+
+
+from ....core.types import ActionType
+from ....core.types import ModelSettings
+from ..base import ProxyBackedAgent, ProxyBackedMCPAgentInstance, ExecutionBackend
+from .cli import ClaudeCLIConfig, ClaudeCodeCLI
+
+
+class ClaudeCodeAgentInstance(ProxyBackedMCPAgentInstance):
+    """Self-contained Claude Code CLI agent routed through a LiteLLM proxy."""
+
+    def __init__(
+        self,
+        session_id: str,
+        task: str,
+        context: Dict[str, Any],
+        actions: List[ActionType],
+        model_id: str,
+        max_steps: int = 150,
+        runner: ExecutionBackend = ExecutionBackend.DOCKER,
+        model_settings: ModelSettings | None = None,
+    ):
+        # The alias is what we ask Claude Code CLI for; the proxy maps it to the backend model.
+        self._claude_model_alias = "claude-3-5-sonnet-20241022"
+        super().__init__(
+            session_id,
+            task,
+            context,
+            actions,
+            model_id,
+            max_steps=max_steps,
+            model_alias=self._claude_model_alias,
+            runner=runner,
+            model_settings=model_settings,
+        )
+        self._claude_log = self.paths.agent_dir / "claude_cli.log"
+
+    @property
+    def cli_display_name(self) -> str:
+        return "Claude Code CLI"
+
+    def _build_cli(self) -> ClaudeCodeCLI:
+        cfg_dir = self.paths.agent_dir / "claude_code_config"
+        return ClaudeCodeCLI(
+            env=os.environ.copy(),
+            log_path=self._claude_log,
+            config_dir=cfg_dir,
+            logger=self.logger,
+            runner=self.runner,
+        )
+
+    def _run_cli(
+        self,
+        cli: ClaudeCodeCLI,
+        prompt: str,
+        mcp_host: str,
+        mcp_port: int,
+        proxy: Any,
+    ) -> Any:
+        # allowed_tools = [f"mcp__environment__{action.name}" for action in self.actions]
+        config = ClaudeCLIConfig(
+            mcp_host=mcp_host,
+            mcp_port=mcp_port,
+            provider_url=proxy.base_url,
+            backend_model=self.model_id,
+            claude_model=self._claude_model_alias,
+            # allowed_tools=allowed_tools,
+            max_turns=self.max_steps,
+        )
+        config.env = {
+            "MCP_TIMEOUT": str(config.mcp_timeout_ms),
+            "MCP_TOOL_TIMEOUT": str(config.mcp_tool_timeout_ms),
+        }
+        result = cli.run(prompt=prompt, config=config)
+        return result.stdout
+
+    def _stringify_empty_output(self) -> bool:
+        return True
+
+
+class ClaudeCodeAgent(ProxyBackedAgent):
+    display_name: ClassVar[str] = "Claude Code CLI"
+    slug_name: ClassVar[str] = "claude_code"
+    agent_cls: ClassVar[type[ProxyBackedMCPAgentInstance]] = ClaudeCodeAgentInstance
+    runner: ExecutionBackend = ExecutionBackend.DOCKER
+
+    def get_models_names(self) -> List[str]:  # type: ignore[override]
+        return [str(self.model_id)]

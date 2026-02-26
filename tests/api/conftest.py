@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) 2026, The Exgentic organization and its contributors.
+
+from __future__ import annotations
+
+from typing import Iterator
+
+import pytest
+
+from exgentic.interfaces import registry
+from exgentic.interfaces.registry import RegistryEntry
+
+
+@pytest.fixture(autouse=True)
+def register_test_components() -> Iterator[None]:
+    original_benchmarks = dict(registry.BENCHMARKS)
+    original_agents = dict(registry.AGENTS)
+    registry.BENCHMARKS["test_benchmark"] = RegistryEntry(
+        slug_name="test_benchmark",
+        display_name="Test Benchmark",
+        module="tests.api.fixtures.test_benchmark",
+        attr="TestBenchmark",
+        kind="benchmark",
+    )
+    registry.AGENTS["test_agent"] = RegistryEntry(
+        slug_name="test_agent",
+        display_name="Test Agent",
+        module="tests.api.fixtures.test_agent",
+        attr="TestAgent",
+        kind="agent",
+    )
+    try:
+        yield
+    finally:
+        registry.BENCHMARKS.clear()
+        registry.BENCHMARKS.update(original_benchmarks)
+        registry.AGENTS.clear()
+        registry.AGENTS.update(original_agents)

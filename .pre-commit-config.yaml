@@ -1,0 +1,54 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.1.6
+    hooks:
+      # Run the linter on all files except the specific one
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, misc/utils/.secrets.baseline]
+        exclude: misc/utils/.secrets.baseline
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.2.6
+    hooks:
+      - id: codespell
+        additional_dependencies:
+          - tomli
+
+  - repo: local
+    hooks:
+      - id: enforce-spdx-header
+        name: Enforce SPDX Header
+        entry: python3 misc/utils/enforce_spdx_header.py
+        language: system
+        files: \.py$
+        exclude: ^\.venv/
+        types: [python]
+      - id: enforce-relative-imports
+        name: Enforce Relative Imports
+        entry: python3 misc/utils/enforce_relative_imports.py
+        language: system
+        # Adjust the files pattern to match your needs
+        files: ^src/.*\.py$
+        # Optional: Specify types or exclude files
+        types: [python]
+
+  - repo: local
+    hooks:
+      - id: enforce-library-imports
+        name: Enforce Library Imports
+        entry: python3 misc/utils/enforce_library_imports.py
+        language: system
+        # Adjust the files pattern to match your needs
+        exclude: (^src/.*\.py$)|misc/utils/enforce_library_imports.py|misc/utils/enforce_relative_imports.py
+        # Optional: Specify types or exclude files
+        types: [python]

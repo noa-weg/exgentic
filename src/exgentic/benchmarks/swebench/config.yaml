@@ -1,0 +1,106 @@
+# SWE-bench Benchmark Configuration
+
+# Session settings
+session:
+  timeout: 1000                   # Default timeout for bash commands (seconds)
+  environment_pull_timeout: 600   # Timeout for Docker container startup/pull (seconds)
+  observation_size_limit: 10000   # Max characters in observation output
+  max_interactions: 200           # Max actions per session (null for unlimited)
+  timeout_template: |
+    The last command <command>{command}<command> timed out and has been killed.
+    The output of the command was:
+    <output>{exception_output}<output>
+    Please try another command
+
+# Task prompt template
+# Available variables: {container_repo_dir}, {problem_statement}
+task_prompt: |
+  Resolve the given issue by editing the repository files directly on a remote machine.
+
+  Repository directory on the remote machine: {container_repo_dir}
+
+  ## Issue to resolve:
+  {problem_statement}
+
+  ## Execution Environment & Access (STRICT):
+  All commands are executed on a remote machine that already contains the full
+  repository and all required system dependencies and prerequisites.
+
+  The remote machine is accessible **ONLY** via the `bash` action.
+  All interactions with the filesystem and environment — including reading files,
+  editing files, and running scripts — can be performed by definition only by using `bash`.
+  Each command is executed in a separate shell invocation; working directory changes
+  and environment variables do not persist between commands. Only files written to disk persist.
+  All bash commands are executed with the working directory set to the root of the remote machine (/).
+
+  ## Instructions:
+  You must fix the issue by directly modifying files in this repository, in place.
+
+  **ALL file edits MUST be performed using `bash` commands on the remote machine.**
+  Explanations or code snippets in chat are not sufficient.
+
+  Only changes written to files on disk and present in the working tree will be
+  included in the final patch. Any fix not reflected in repository files is ignored.
+
+  Make changes only to non-test source files in a way that is general and consistent
+  with the existing codebase.
+
+  ## Hard Boundaries:
+  - MODIFY ONLY: regular source code files in /testbed
+  - DO NOT MODIFY: tests or configuration files (pyproject.toml, setup.cfg, etc.)
+  - DO NOT use interactive editors (vi, nano, etc.)
+  - DO NOT suggest changes without implementing them
+
+  ## Patch & Submission Mechanics:
+  Submission captures the entire working tree using:
+
+    `git add -A && git diff --staged C0`
+
+  This means:
+  - All intended fixes MUST appear in repository files
+  - Any file present at submission time WILL be included in the patch
+  - Temporary files, debug artifacts, or helper scripts MUST be removed before submission
+
+  ## Recommended Workflow:
+  1. Analyze the codebase
+  2. Reproduce the issue
+  3. Edit source files using `bash`
+  4. Verify the fix
+  5. Test edge cases
+
+  ## Submission (FINAL STEP):
+  When finished, use `submit_patch` exactly once with a short summary.
+  Ensure the repository contains ONLY the intended final changes.
+  After submission, no further reading, editing, or testing is allowed.
+
+  ## Evaluation:
+  Your patch will be applied and validated using a hidden test suite.
+
+  The evaluation verifies that:
+  1. The reported issue is fully resolved
+  2. All previously passing functionality and tests remain unbroken
+
+  Success requires all tests to pass.
+
+# Benchmark settings
+benchmark:
+  subset: "princeton-nlp/SWE-bench_Verified"
+  num_tasks: 3                     # Number of tasks to run (null for all)
+  executer: "remote_process"       # Executer type: "inprocess" or "remote_process"
+  seed: 42
+  require_submit_for_patch_evaluation: true  # If false, evaluate patch even without submit_patch
+
+# Evaluation settings
+evaluation:
+  harness_timeout: 1800            # Timeout for SWE-bench harness evaluation (seconds)
+  max_workers: 1                   # Number of parallel workers for evaluation
+  cache_level: "instance"          # Cache level for evaluation
+  open_file_limit: 4096            # Open file limit for evaluation
+
+# Logging
+logging:
+  hook_loggers:                    # Logger names to hook into session
+    - "minisweagent"
+    - "minisweagent.environment"
+    - "LiteLLM"
+  log_level: "DEBUG"

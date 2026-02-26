@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "exgentic"
+version = "0.1.0"
+description = "Exgentic - General agent evaluation"
+authors = [{name = "Exgentic Team"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "typing-extensions",
+    "pydantic-settings",
+    "nicegui",
+    "cloudpickle",
+    "diskcache",
+    "filelock",
+    "click>=8.1.7",
+    "json-schema-to-pydantic",
+    "litellm>=1.65.0",
+    "mcp>=1.24",
+    "pydantic>=2.9.2,<3",
+    "python-dotenv",
+    "rich",
+    "rich-click",
+    "scipy",
+    "statsmodels"
+]
+
+[project.scripts]
+exgentic = "exgentic.interfaces.cli.main:main"
+
+[project.optional-dependencies]
+smolagents = [
+    "smolagents>=1.13.0",
+]
+openaimacp = [
+    "openai-agents[litellm]"
+]
+otel = [
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-exporter-otlp-proto-grpc",
+    "opentelemetry-semantic-conventions-ai>=0.4.0",
+]
+
+cli = [
+    "litellm[proxy]"
+]
+
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio",
+    "pytest-mock",
+    "pre-commit",
+    "ruff",
+    "codespell",
+    "detect-secrets",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/exgentic"]
+include = [
+    "src/exgentic/benchmarks/**/setup.sh",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/docs",
+    "/examples",
+]
+
+[tool.uv]
+override-dependencies = [
+  "rich>=13.9.4",
+]
