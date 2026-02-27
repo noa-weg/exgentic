@@ -233,7 +233,7 @@ For Python API usage examples, see the [`examples/`](./examples/) directory.
 
 ## 📖 How It Works
 
-To learn more about Exgentic's architecture and design, see our arXiv paper: [Coming soon]
+To learn more about Exgentic's architecture and design, see our [arXiv paper](https://arxiv.org/abs/2602.22953).
 
 ## 🤝 Contributing
 
