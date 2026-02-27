@@ -4,11 +4,20 @@
   <strong>Evaluate any agent on any benchmark in the simplest way possible</strong>
 </p>
 
+--- 
+## 🎯 What is Exgentic?
+
+Exgentic is a universal evaluation framework that enables standardized testing of AI agents across diverse benchmarks and domains. It provides a consistent interface for evaluating any agent on any benchmark, making it easy to compare performance, reproduce results, and ensure your agent works reliably across different tasks and environments.
+
+## 👥 Who is it for?
+Exgentic serves multiple audiences in the AI agent ecosystem:
+1. **General Audience** - Visit [www.exgentic.ai](https://www.exgentic.ai) to explore the first general agent leaderboard comparing leading agents and frontier models across varied tasks.
+2. **Agent Builders** - Evaluate your agents comprehensively across multiple domains and benchmarks to ensure robust performance and identify areas for improvement.
+3. **Researchers & Component Developers** - Test general agentic components (such as memory systems, context compression, planning modules) across different agents and domains to validate their effectiveness and generalizability.
+4. **Benchmark Builders** - Evaluate your benchmark across multiple agents to ensure it provides meaningful differentiation and works reliably with different agent architectures.
+
 ---
-
-## ✨ Features & Benefits
-
-### 🎯 Key Features
+## ✨ Key Features 
 
 - 🔄 **Universal Evaluation Framework** - Evaluate any agent on any benchmark with a consistent, standardized interface
 - 🤖 **Multi-Agent Support** - Built-in support for LiteLLM, SmolAgents, OpenAI MCP, and Claude Code agents
@@ -20,14 +29,8 @@
 - ⚙️ **Fine-Grained Control** - Configure model parameters, run limits, and benchmark/agent-specific settings
 - 📁 **Structured Output** - Organized directory structure with session-level and run-level artifacts for easy analysis
 - 💰 **Cost Tracking** - Automatic tracking of API costs and performance metrics
-
-### 🚀 Benefits
-
-- ✅ **Standardization** - Consistent evaluation methodology enables fair comparisons across agents and benchmarks
-- 🔁 **Reproducibility** - Comprehensive logging and configuration snapshots enable exact reproduction of any run
+- 🏭 **Scalable** - Built-in caching, optimization, and monitoring features for scaled evaluations
 - 🧩 **Extensibility** - Modular architecture makes it easy to add new agents or benchmarks
-- 🏭 **Production-Ready** - Built-in caching, optimization, and monitoring features for real-world deployments
-- 👨‍💻 **Developer-Friendly** - Simple setup with clear documentation and examples
 
 ---
 
