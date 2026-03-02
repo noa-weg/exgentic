@@ -45,15 +45,15 @@ Exgentic serves multiple audiences in the AI agent ecosystem:
 
 Clone the repository:
 ```bash
-git clone <repository-url>
-cd exgentic-research
+git clone  https://github.com/Exgentic/exgentic.git
+cd exgentic
 ```
 
 Set up your environment:
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e ".[litellm,smolagents]"
+pip install -e ".[smolagents]"
 ```
 
 ### 🔧 Benchmark Setup
