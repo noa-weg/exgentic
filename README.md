@@ -143,13 +143,7 @@ There are two simple example benchmarks:
 **Setup:** `exgentic setup --agent openai`  
 
 ### 🎨 Claude Code
-**Setup:** `exgentic setup --agent claude`  
-
-### 🔷 Codex
-**Setup:** `exgentic setup --agent codex`  
-
-### 🔷 Gemini
-**Setup:** `exgentic setup --agent gemini`  
+**Setup:** `exgentic setup --agent claude`   
 
 ---
 

@@ -26,7 +26,7 @@ fi
 # Install Gemini CLI
 echo "Installing Gemini CLI..."
 if command -v npm >/dev/null 2>&1; then
-    npm install -g @google/generative-ai-cli
+    npm install -g @google/gemini-cli
     if [ $? -eq 0 ]; then
         echo "Gemini CLI installed successfully"
     else
@@ -35,7 +35,7 @@ if command -v npm >/dev/null 2>&1; then
     fi
 else
     echo "Warning: npm not found. Please install Node.js and npm to use Gemini CLI"
-    echo "After installing npm, run: npm install -g @google/generative-ai-cli"
+    echo "After installing npm, run: npm install -g @google/gemini-cli"
 fi
 
 echo "Gemini Agent setup complete"
