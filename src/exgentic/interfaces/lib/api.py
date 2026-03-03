@@ -564,6 +564,34 @@ def setup_benchmark(benchmark: str) -> None:
     subprocess.run(["bash", setup_path], check=True)
 
 
+def get_agent_setup_script_path(agent: str) -> str:
+    entries = get_agent_entries()
+    entry = entries.get(agent)
+    if entry is None:
+        raise ValueError(
+            f"Unknown agent slug '{agent}'. "
+            f"Available: {', '.join(sorted(entries.keys()))}"
+        )
+    parts = entry.module.split(".")
+    if len(parts) < 3:
+        raise ValueError(f"Invalid module path for agent '{agent}'.")
+    package = ".".join(parts[:3])
+    try:
+        setup_path = resources.files(package) / "setup.sh"
+    except Exception as exc:
+        raise ValueError(
+            f"Unable to locate setup.sh for agent '{agent}'."
+        ) from exc
+    if not setup_path.is_file():
+        raise ValueError(f"setup.sh not found for agent '{agent}'.")
+    return str(setup_path)
+
+
+def setup_agent(agent: str) -> None:
+    setup_path = get_agent_setup_script_path(agent)
+    subprocess.run(["bash", setup_path], check=True)
+
+
 def _describe_init_args(cls: type) -> List[str]:
     model_fields = getattr(cls, "model_fields", None)
     if model_fields:
@@ -599,4 +627,8 @@ __all__ = [
     "status",
     "preview",
     "results",
+    "setup_benchmark",
+    "setup_agent",
+    "get_setup_script_path",
+    "get_agent_setup_script_path",
 ]
