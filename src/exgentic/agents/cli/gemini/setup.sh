@@ -18,12 +18,27 @@ else
     python -m pip install -e ".[cli]"
 fi
 
-if [ $? -eq 0 ]; then
-    echo "Gemini Agent installed successfully"
-    echo "Note: Additional Gemini-specific configuration may be required"
-else
+if [ $? -ne 0 ]; then
     echo "Gemini Agent installation failed"
     exit 1
 fi
+
+# Install Gemini CLI
+echo "Installing Gemini CLI..."
+if command -v npm >/dev/null 2>&1; then
+    npm install -g @google/generative-ai-cli
+    if [ $? -eq 0 ]; then
+        echo "Gemini CLI installed successfully"
+    else
+        echo "Warning: Gemini CLI installation failed"
+        echo "You may need to install it manually with: npm install -g @google/generative-ai-cli"
+    fi
+else
+    echo "Warning: npm not found. Please install Node.js and npm to use Gemini CLI"
+    echo "After installing npm, run: npm install -g @google/generative-ai-cli"
+fi
+
+echo "Gemini Agent setup complete"
+echo "Note: Additional Gemini-specific configuration may be required"
 
 # Made with Bob

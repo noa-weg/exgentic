@@ -592,7 +592,15 @@ def get_agent_setup_script_path(agent: str) -> str:
     parts = entry.module.split(".")
     if len(parts) < 3:
         raise ValueError(f"Invalid module path for agent '{agent}'.")
-    package = ".".join(parts[:3])
+    
+    # For CLI agents with nested structure (e.g., exgentic.agents.cli.claude.agent),
+    # use 4 parts to get the specific CLI agent directory
+    # For other agents (e.g., exgentic.agents.openai.openai_mcp_agent), use 3 parts
+    if len(parts) >= 4 and parts[2] == "cli":
+        package = ".".join(parts[:4])
+    else:
+        package = ".".join(parts[:3])
+    
     try:
         setup_path = resources.files(package) / "setup.sh"
     except Exception as exc:

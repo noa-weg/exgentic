@@ -18,12 +18,27 @@ else
     python -m pip install -e ".[cli]"
 fi
 
-if [ $? -eq 0 ]; then
-    echo "Codex Agent installed successfully"
-    echo "Note: Additional Codex-specific configuration may be required"
-else
+if [ $? -ne 0 ]; then
     echo "Codex Agent installation failed"
     exit 1
 fi
+
+# Install Codex CLI
+echo "Installing Codex CLI..."
+if command -v npm >/dev/null 2>&1; then
+    npm install -g codex-cli
+    if [ $? -eq 0 ]; then
+        echo "Codex CLI installed successfully"
+    else
+        echo "Warning: Codex CLI installation failed"
+        echo "You may need to install it manually with: npm install -g codex-cli"
+    fi
+else
+    echo "Warning: npm not found. Please install Node.js and npm to use Codex CLI"
+    echo "After installing npm, run: npm install -g codex-cli"
+fi
+
+echo "Codex Agent setup complete"
+echo "Note: Additional Codex-specific configuration may be required"
 
 # Made with Bob
