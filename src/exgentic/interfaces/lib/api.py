@@ -11,6 +11,10 @@ from typing import Any, Dict, List
 
 from ...core.benchmark import Benchmark
 from ...core.agent import Agent
+from ...utils.installation_tracker import (
+    record_installation,
+    get_all_installations,
+)
 from ...core.orchestrator.run import (
     core_aggregate,
     core_evaluate,
@@ -29,16 +33,28 @@ from ..registry import (
 
 def list_benchmarks() -> List[Dict[str, Any]]:
     entries = get_benchmark_entries()
+    installations = get_all_installations("benchmark")
     return [
-        {"slug_name": slug, "display_name": entry.display_name}
+        {
+            "slug_name": slug,
+            "display_name": entry.display_name,
+            "installed": slug in installations,
+            "installed_at": installations.get(slug, {}).get("installed_at"),
+        }
         for slug, entry in sorted(entries.items())
     ]
 
 
 def list_agents() -> List[Dict[str, Any]]:
     entries = get_agent_entries()
+    installations = get_all_installations("agent")
     return [
-        {"slug_name": slug, "display_name": entry.display_name}
+        {
+            "slug_name": slug,
+            "display_name": entry.display_name,
+            "installed": slug in installations,
+            "installed_at": installations.get(slug, {}).get("installed_at"),
+        }
         for slug, entry in sorted(entries.items())
     ]
 
@@ -562,6 +578,7 @@ def get_setup_script_path(benchmark: str) -> str:
 def setup_benchmark(benchmark: str) -> None:
     setup_path = get_setup_script_path(benchmark)
     subprocess.run(["bash", setup_path], check=True)
+    record_installation(benchmark, "benchmark")
 
 
 def get_agent_setup_script_path(agent: str) -> str:
@@ -590,6 +607,7 @@ def get_agent_setup_script_path(agent: str) -> str:
 def setup_agent(agent: str) -> None:
     setup_path = get_agent_setup_script_path(agent)
     subprocess.run(["bash", setup_path], check=True)
+    record_installation(agent, "agent")
 
 
 def _describe_init_args(cls: type) -> List[str]:
