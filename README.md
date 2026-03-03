@@ -53,7 +53,7 @@ Set up your environment:
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e ".[smolagents]"
+
 ```
 
 ### 🔧 Setup
