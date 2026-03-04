@@ -46,6 +46,7 @@ ignore = [
     "D107",    # Missing docstring in __init__
     "G004",    # Logging statement uses f-string
     "UP007",   # Use `X | Y` for type annotations
+    "RET504",  # Unnecessary assignment to ... before return
 ]
 
 # Allow autofix for all enabled rules

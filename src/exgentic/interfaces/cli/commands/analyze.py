@@ -210,7 +210,7 @@ def _build_leaderboard_table(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
 
     config_points = {}
     config_weighted_comparisons = {}
-    for bench, group in valid_df.groupby("benchmark"):
+    for _bench, group in valid_df.groupby("benchmark"):
         weight = group["benchmark_weight"].iloc[0]
         config_scores = {}
         for _, row in group.iterrows():
@@ -575,7 +575,7 @@ def analyse_model_win_rate_cmd(csv_path: Path) -> None:
     model_points = {m: 0.0 for m in valid_df["model_normalized"].unique()}
     model_weighted_comparisons = {m: 0.0 for m in model_points}
 
-    for (agent, bench), group in valid_df.groupby(["agent_normalized", "benchmark"]):
+    for (_agent, _bench), group in valid_df.groupby(["agent_normalized", "benchmark"]):
         weight = group["benchmark_weight"].iloc[0]
         model_scores = {}
         for _, row in group.iterrows():
@@ -614,7 +614,7 @@ def analyse_config_win_rate_cmd(csv_path: Path) -> None:
     config_points = {}
     config_weighted_comparisons = {}
 
-    for bench, group in valid_df.groupby("benchmark"):
+    for _bench, group in valid_df.groupby("benchmark"):
         weight = group["benchmark_weight"].iloc[0]
         config_scores = {}
         for _, row in group.iterrows():
@@ -888,7 +888,7 @@ def analyse_cost_score_cmd(csv_path: Path, output_path: Path | None) -> None:
     )
 
     fig, ax = plt.subplots(figsize=(6, 4))
-    for idx, (_, row) in enumerate(plot_df.iterrows()):
+    for _idx, (_, row) in enumerate(plot_df.iterrows()):
         shape = AGENT_SHAPES[row["agent"]]
         color = MODEL_COLORS[row["model"]]
         marker_size = 260 if shape == "*" else 200

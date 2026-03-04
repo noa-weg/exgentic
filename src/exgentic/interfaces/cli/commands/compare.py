@@ -964,7 +964,7 @@ def compare_cmd(
         TaskProgressColumn(),
         console=Console(),
     ) as progress:
-        for setup_idx, (idx, agent, model) in enumerate(setups):
+        for setup_idx, (_idx, agent, model) in enumerate(setups):
             setup_label = setup_labels[setup_idx]
             setup_results = {}
 

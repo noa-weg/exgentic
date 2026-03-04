@@ -59,7 +59,7 @@ class ExgenticSettings(BaseSettings):
         """Return env vars for all settings fields (EXGENTIC_*)."""
         env: dict[str, str] = {}
         prefix = self.model_config.get("env_prefix") or ""
-        for name, field in type(self).model_fields.items():
+        for name, _field in type(self).model_fields.items():
             if name.startswith("_"):
                 continue
             value = getattr(self, name, None)
