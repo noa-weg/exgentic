@@ -52,7 +52,9 @@ def _metric_help_text(label: str) -> Optional[str]:
         "Finished Rate": "Share of sessions marked finished.",
         "Success %": "Share of successful sessions.",
         "Finished %": "Share of sessions marked finished.",
-        "Status": "Session status (running/success/unsuccessful/unfinished/agent error/benchmark error/cancelled/error).",
+        "Status": (
+            "Session status (running/success/unsuccessful/unfinished/" "agent error/benchmark error/cancelled/error)."
+        ),
         "Steps": "Number of actions taken in the session.",
         "Score": "Session score from the benchmark.",
         "Exec Time (s)": "Elapsed time for the session.",

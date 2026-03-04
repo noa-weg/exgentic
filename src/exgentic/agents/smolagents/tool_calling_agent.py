@@ -27,7 +27,10 @@ class SmolagentToolCallingAgentInstance(SmolagentBaseAgentInstance):
         prompt = f"Task: {self.task}\n\n"
         if self.context:
             prompt += f"Context: {self.context}\n\n"
-        prompt += "Complete this task using the available tools. Each tool corresponds to an action you can take in the environment.\n"
+        prompt += (
+            "Complete this task using the available tools. "
+            "Each tool corresponds to an action you can take in the environment.\n"
+        )
         if self.initial_observation is not None and not self.initial_observation.is_empty():
             text = str(self.initial_observation).strip()
             if text:

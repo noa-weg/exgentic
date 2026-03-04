@@ -288,7 +288,8 @@ class SWEBenchSession(Session):
         results_path = self.paths.benchmark_results
         swebench_logs.write_results(results_path, self._score)
         self.logger.info(
-            f"SCORE | Final | success={self._score.success} | score={self._score.score} | is_finished={self._score.is_finished}"
+            f"SCORE | Final | success={self._score.success} | score={self._score.score} | "
+            f"is_finished={self._score.is_finished}"
         )
 
         return self._score
@@ -342,7 +343,8 @@ class SWEBenchSession(Session):
             self._registry.add_action(
                 name="finish",
                 description=(
-                    "Finish the task by submitting a brief summary. The system automatically computes the git patch from the repository changes."
+                    "Finish the task by submitting a brief summary. "
+                    "The system automatically computes the git patch from the repository changes."
                 ),
                 action_cls=SubmitPatchAction,
                 handler=self._handle_submit_patch,

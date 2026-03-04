@@ -293,8 +293,8 @@ class OpenAIMCPAgentInstance(MCPAgentInstance):
         prompt += (
             "Complete this task using the available tools. Each tool corresponds to an action "
             "you can take in the environment. Do not respond or ask clarification questions "
-            "unless done through a dedicated tool, and only if such tool exist. Any plain message that is not a tool call "
-            "will end the run in failure.\n"
+            "unless done through a dedicated tool, and only if such tool exist. "
+            "Any plain message that is not a tool call will end the run in failure.\n"
         )
 
         if self.initial_observation is not None and not self.initial_observation.is_empty():

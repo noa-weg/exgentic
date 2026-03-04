@@ -101,7 +101,8 @@ class SearchService:
 
             mem_after = process.memory_info().rss / 1024 / 1024
             logger.info(
-                f"Searcher model loaded: {searcher_type} (after: {mem_after:.1f} MB, delta: {mem_after - mem_before:.1f} MB)"
+                f"Searcher model loaded: {searcher_type} "
+                f"(after: {mem_after:.1f} MB, delta: {mem_after - mem_before:.1f} MB)"
             )
 
             return ThreadSafeSearcherWrapper(searcher, self._search_semaphore)

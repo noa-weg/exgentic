@@ -129,7 +129,10 @@ def safe_repr(item) -> str:
 
 
 def safe_kv(v: Any) -> Any:
-    """Sanitize value for OTEL attributes (primitives or arrays of primitives only) other objects will be stringified."""
+    """Sanitize value for OTEL attributes (primitives or arrays of primitives only).
+
+    Other objects will be stringified.
+    """
     if isinstance(v, (str, int, float, bool)):
         return v
     if isinstance(v, (list, tuple)):
@@ -258,7 +261,8 @@ class OtelLogger:
         timestamp = start_time.strftime("%Y-%m-%d %H:%M:%S.%f")
         time_info = f" start_time={timestamp}" if start_time else ""
         self.info(
-            f"SPAN_START{root_marker} | name='{span_name}' id={span_id} trace={trace_id}{parent_info}{depth_info}{time_info}"
+            f"SPAN_START{root_marker} | name='{span_name}' id={span_id} trace={trace_id}"
+            f"{parent_info}{depth_info}{time_info}"
         )
 
     def log_span_rename(self, old_name: str, new_name: str, span_id: str) -> None:

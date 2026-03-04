@@ -422,9 +422,18 @@ def analyse_leaderboard_paper_cmd(csv_path: Path, output_path: Path | None) -> N
 \renewcommand{\arraystretch}{1.7}
 \setlength{\tabcolsep}{3pt}
 \footnotesize
-\begin{tabular}{@{}l l c c c !{\color{gray!20}\vrule} >{\columncolor{benchmarkbg}}c >{\columncolor{benchmarkbg}}c >{\columncolor{benchmarkbg}}c >{\columncolor{benchmarkbg}}c >{\columncolor{benchmarkbg}}c >{\columncolor{benchmarkbg}}c@{}}
+\begin{tabular}{@{}l l c c c !{\color{gray!20}\vrule} >{\columncolor{benchmarkbg}}c """
+    r""">{\columncolor{benchmarkbg}}c >{\columncolor{benchmarkbg}}c >{\columncolor{benchmarkbg}}c """
+    r""">{\columncolor{benchmarkbg}}c >{\columncolor{benchmarkbg}}c@{}}
 \rowcolor{tableheader}
-\textbf{\#} & \textbf{\shortstack{General Agent}} & \scriptsize\textbf{Model} & \shortstack{\scriptsize{Avg}\\\textbf{Success}} & \shortstack{\scriptsize{Avg}\\\textbf{Cost}} & \cellcolor{tableheader}\tiny\textbf{\shortstack{App\\World}} & \cellcolor{tableheader}\tiny\textbf{\shortstack{Browse\\Comp+}} & \cellcolor{tableheader}\tiny\textbf{\shortstack{SWE\\benchV}} & \cellcolor{tableheader}\tiny\textbf{\shortstack{Tau 2\\Airline}} & \cellcolor{tableheader}\tiny\textbf{\shortstack{Tau 2\\Retail}} & \cellcolor{tableheader}\tiny\textbf{\shortstack{Tau 2\\Telecom}} \\
+\textbf{\#} & \textbf{\shortstack{General Agent}} & \scriptsize\textbf{Model} & """
+    r"""\shortstack{\scriptsize{Avg}\\\textbf{Success}} & \shortstack{\scriptsize{Avg}\\\textbf{Cost}} & """
+    r"""\cellcolor{tableheader}\tiny\textbf{\shortstack{App\\World}} & """
+    r"""\cellcolor{tableheader}\tiny\textbf{\shortstack{Browse\\Comp+}} & """
+    r"""\cellcolor{tableheader}\tiny\textbf{\shortstack{SWE\\benchV}} & """
+    r"""\cellcolor{tableheader}\tiny\textbf{\shortstack{Tau 2\\Airline}} & """
+    r"""\cellcolor{tableheader}\tiny\textbf{\shortstack{Tau 2\\Retail}} & """
+    r"""\cellcolor{tableheader}\tiny\textbf{\shortstack{Tau 2\\Telecom}} \\
 """
 
     def fmt_score(value: float | int | None) -> str:
@@ -469,7 +478,9 @@ def analyse_leaderboard_paper_cmd(csv_path: Path, output_path: Path | None) -> N
 \end{tabular}%
 }
 \end{tcolorbox}
-\caption{The \leaderboard{} comparing emerging general agents across standardized benchmarks. Average Success represents the mean success rate across benchmarks; Average Cost represents the mean cost per task. Performance is strongly influenced by backbone model choice.}
+\caption{The \leaderboard{} comparing emerging general agents across standardized benchmarks.
+Average Success represents the mean success rate across benchmarks; Average Cost represents the mean cost per task.
+Performance is strongly influenced by backbone model choice.}
 \label{tab:leaderboard}
 \end{table}
 """

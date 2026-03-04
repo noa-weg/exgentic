@@ -277,7 +277,10 @@ class TAU2Session(PairableProxySession):
 
     @property
     def task(self) -> str:
-        return """You are a customer service agent that helps the user according to the <policy> provided below. Try to be helpful and always follow the policy."""
+        return (
+            "You are a customer service agent that helps the user according to the <policy> "
+            "provided below. Try to be helpful and always follow the policy."
+        )
 
     @property
     def context(self) -> dict[str, Any]:

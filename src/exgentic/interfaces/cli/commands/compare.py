@@ -274,7 +274,8 @@ def _load_run_results(
                         file_path=str(session_results_file),
                     )
                     results_by_task[composite_key] = task_info
-                    # print(f"Loaded session {session_result.session_id} with composite_key {composite_key} with score {session_result.score} from file {session_results_file}.")
+                    # print(f"Loaded session {session_result.session_id} with composite_key {composite_key} "
+                    #       f"with score {session_result.score} from file {session_results_file}.")
 
                 except Exception as e:
                     # Print error but continue loading other sessions
@@ -286,7 +287,8 @@ def _load_run_results(
             # When both are specified, return after first match
             # if config_agent is not None and config_model is not None and results_by_task:
             #    if progress and task_id is not None:
-            #        progress.update(task_id, completed=len(config_files), description=f"Loaded {len(results_by_task)} sessions")
+            #        progress.update(task_id, completed=len(config_files),
+            #                        description=f"Loaded {len(results_by_task)} sessions")
             #    return results_by_task
 
         except Exception as e:

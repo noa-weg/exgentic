@@ -166,7 +166,10 @@ class GSM8kSession(Session):
         if include_calculator_tool:
             self._registry.add_action(
                 name="calculate_expression",
-                description="Evaluate a mathematical expression using only numbers and basic operators (+, -, *, /, parentheses).",
+                description=(
+                    "Evaluate a mathematical expression using only numbers and basic operators "
+                    "(+, -, *, /, parentheses)."
+                ),
                 action_cls=GSM8kCalculateExpressionAction,
                 handler=self._handle_calculate_expression,
             )

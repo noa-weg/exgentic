@@ -196,11 +196,13 @@ class LiteLLMToolCallingAgentInstance(AgentInstance):
         dev = ChatCompletionDeveloperMessage(
             role="developer",
             content=(
-                f"Please before providing your next move list the names of the top {self.max_selected_tools} tools that are somewhat relevant for the next step, "
+                f"Please before providing your next move list the names of the top "
+                f"{self.max_selected_tools} tools that are somewhat relevant for the next step, "
                 "ordered by relevancy (most to least). Return ONLY a JSON object with this shape: "
                 '{\n  "tools": ["tool_name_1", "tool_name_2", ...]\n}.\n'
                 f"Choose from these tools only: {names_str}.\n"
-                f"Do not call any of those tools just return the list of the top {self.max_selected_tools} relevant tools names in the required format."
+                f"Do not call any of those tools just return the list of the top "
+                f"{self.max_selected_tools} relevant tools names in the required format."
             ),
         )
         history = ChatCompletionUserMessage(

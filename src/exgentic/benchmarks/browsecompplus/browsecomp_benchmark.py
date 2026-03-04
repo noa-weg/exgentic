@@ -65,7 +65,11 @@ class BrowseCompPlusGetDocAction(SingleAction):
 class BrowseCompPlusFinishArgs(BaseModel):
     exact_answer: str = Field(description="Your succinct, final answer")
     explanation: str = Field(
-        description="Your explanation for your final answer. For this explanation section only, you should cite your evidence documents inline by enclosing their docids in square brackets [] at the end of sentences. For example, [20]."
+        description=(
+            "Your explanation for your final answer. For this explanation section only, "
+            "you should cite your evidence documents inline by enclosing their docids "
+            "in square brackets [] at the end of sentences. For example, [20]."
+        )
     )
     confidence: float = Field(description="Your confidence score between 0% and 100% for your answer")
 
@@ -153,7 +157,8 @@ class BrowseCompPlusSession(Session):
     @property
     def task(self) -> str:
         get_doc_str = "and document expansion " if self.search_tool_handler.include_get_document else ""
-        return f"""Answer the provided question by performing search {get_doc_str}as needed, and submit your final answer.
+        return f"""Answer the provided question by performing search {get_doc_str}as needed, \
+and submit your final answer.
 Question: {self._instance["query"]}
 Note:
 - The question has an answer discoverable through proper search.
@@ -161,12 +166,16 @@ Note:
 
 Your performance is scored based on:
     1. Most importantly, the correctness of the answer you assembled from different searches.
-    2. Your effective use of search and your ability to retrieve all relevant information for the question.
+    2. Your effective use of search and your ability to retrieve all relevant information \
+for the question.
     3. How efficiently you find all the relevant information, using as few searches as possible.
 
-Important: During your work, Do NOT interact with the user or send any messages at any point — messages will be ignored and are NOT considered a valid final answer. The ONLY acceptable way to finish is by calling 'submit' with the required structured fields.
+Important: During your work, Do NOT interact with the user or send any messages at any point — \
+messages will be ignored and are NOT considered a valid final answer. The ONLY acceptable way to \
+finish is by calling 'submit' with the required structured fields.
 
-Finish the session always by calling `submit`. If you fail to find the answer, submit with exact_answer: "Can't find the answer."."""
+Finish the session always by calling `submit`. If you fail to find the answer, submit with exact_answer: \
+"Can't find the answer."."""
 
     @property
     def context(self) -> Dict[str, Any]:
@@ -259,7 +268,10 @@ Finish the session always by calling `submit`. If you fail to find the answer, s
         n_tokens = self.search_tool_handler.snippet_max_tokens
         self._registry.add_action(
             name="search",
-            description=f"Perform a search on a knowledge source: supply a single 'query' string; the action retrieves the {k} top most relevant results, each trimmed to {n_tokens} tokens.",
+            description=(
+                f"Perform a search on a knowledge source: supply a single 'query' string; "
+                f"the action retrieves the {k} top most relevant results, each trimmed to {n_tokens} tokens."
+            ),
             action_cls=BrowseCompPlusSearchAction,
             handler=self._handle_search,
         )

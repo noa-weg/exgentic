@@ -41,9 +41,12 @@ class SmolagentCodeAgentInstance(SmolagentBaseAgentInstance):
         if self.context:
             prompt += f"Context: {self.context}\n\n"
         prompt += (
-            "Complete this task using the available functions. Each function corresponds to an action you can take to solve the given task.\n"
-            "Every action should be taken only by calling one of the functions. If one function fail, consider using another, at any given point one of the functions\n"
-            "can be a valid next step. At any point you should executing actions by writing code. do not call tools with tool calling mechanism.\n\n"
+            "Complete this task using the available functions. "
+            "Each function corresponds to an action you can take to solve the given task.\n"
+            "Every action should be taken only by calling one of the functions. "
+            "If one function fail, consider using another, at any given point one of the functions\n"
+            "can be a valid next step. At any point you should executing actions by writing code. "
+            "do not call tools with tool calling mechanism.\n\n"
             "Printing or any other code will be visible only by you alone.\n\n"
             # "Always provide parameter names when calling function. Do not rely on positional arguments.\n"
         )
