@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import re
-from click.testing import CliRunner
+from pathlib import Path
 
+from click.testing import CliRunner
 from exgentic.core.types import SessionResults
 from exgentic.core.types.session import SessionOutcomeStatus
 from exgentic.interfaces.cli.main import cli
@@ -85,9 +85,7 @@ def create_mock_results(
         )
 
         results_file = session_dir / "results.json"
-        results_file.write_text(
-            session_result.model_dump_json(indent=2), encoding="utf-8"
-        )
+        results_file.write_text(session_result.model_dump_json(indent=2), encoding="utf-8")
 
 
 def test_compare_two_agents_same_benchmark(tmp_path):
@@ -470,9 +468,7 @@ def test_compare_pairwise_three_agents(tmp_path):
     assert "Detailed Comparison: test_benchmark2" in result.output
     assert "Detailed Comparison: test_benchmark2" in result.output
     assert re.search(
-        r"Detailed Comparison.*"
-        r"agent1 and model1.*agent2 and model1.*"
-        r"agent1 and model1.*agent2 and model1.*",
+        r"Detailed Comparison.*" r"agent1 and model1.*agent2 and model1.*" r"agent1 and model1.*agent2 and model1.*",
         result.output,
         flags=re.DOTALL,
     )
@@ -1326,8 +1322,7 @@ def test_breslow_day_homogeneous_high_pvalue(tmp_path):
         breslow_day["p_value"] > 0.05
     ), f"Expected high p-value (>0.05) for homogeneous data, got {breslow_day['p_value']}"
     assert (
-        "homogeneous" in breslow_day["interpretation"].lower()
-        or "consistent" in breslow_day["interpretation"].lower()
+        "homogeneous" in breslow_day["interpretation"].lower() or "consistent" in breslow_day["interpretation"].lower()
     ), f"Expected 'homogeneous' or 'consistent' in interpretation, got: {breslow_day['interpretation']}"
 
 
@@ -1554,8 +1549,7 @@ def test_breslow_day_heterogeneous_low_pvalue(tmp_path):
         breslow_day["p_value"] < 0.05
     ), f"Expected low p-value (<0.05) for heterogeneous data, got {breslow_day['p_value']}"
     assert (
-        "heterogeneity" in breslow_day["interpretation"].lower()
-        or "varies" in breslow_day["interpretation"].lower()
+        "heterogeneity" in breslow_day["interpretation"].lower() or "varies" in breslow_day["interpretation"].lower()
     ), f"Expected 'heterogeneity' or 'varies' in interpretation, got: {breslow_day['interpretation']}"
 
 
@@ -1633,9 +1627,7 @@ def test_breslow_day_text_output(tmp_path):
         "Breslow-Day" in result.output or "breslow" in result.output.lower()
     ), "Expected Breslow-Day test information in text output"
     assert (
-        "P-value" in result.output
-        or "p-value" in result.output
-        or "p=" in result.output
+        "P-value" in result.output or "p-value" in result.output or "p=" in result.output
     ), "Expected p-value in text output"
     assert (
         "Interpretation" in result.output

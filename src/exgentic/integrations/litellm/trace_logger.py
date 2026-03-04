@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
-"""
-Custom LiteLLM logger that writes token/cost usage and request/response trace to a JSONL file.
+"""Custom LiteLLM logger that writes token/cost usage and request/response trace to a JSONL file.
 
 Environment variables:
     EXGENTIC_LLM_LOG_FILE: optional override of the output JSONL path (default: trace.jsonl in CWD).
@@ -11,17 +10,16 @@ Environment variables:
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from litellm.integrations.custom_logger import CustomLogger
 
-from ...core.context import ENV_OTEL_TRACE_ID, ENV_OTEL_SPAN_ID
+from ...core.context import ENV_OTEL_SPAN_ID, ENV_OTEL_TRACE_ID
 from ...utils.settings import get_settings
-
 
 # Environment variable constants
 FILE_ENV = "EXGENTIC_LLM_LOG_FILE"
@@ -54,12 +52,10 @@ class TraceLogger(CustomLogger):
 
     def _init_otel(self) -> None:
         """Initialize OTEL tracer and logger."""
-        from ...utils.otel import init_tracing_from_env, get_session_logger
+        from ...utils.otel import get_session_logger, init_tracing_from_env
 
         # Initialize the TracerProvider (use simple processor for subprocess)
-        self._tracer = init_tracing_from_env(
-            service_name="exgentic-litellm", use_simple_processor=True
-        )
+        self._tracer = init_tracing_from_env(service_name="exgentic-litellm", use_simple_processor=True)
 
         # Get session logger from ContextVar (initialize from env in subprocesses).
         try:
@@ -84,8 +80,8 @@ class TraceLogger(CustomLogger):
         For proxy subprocess: reads from environment variables
         For direct callback: reads from Context ContextVar
         """
-        from opentelemetry import trace, context
-        from opentelemetry.trace import SpanContext, TraceFlags, NonRecordingSpan
+        from opentelemetry import context, trace
+        from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
 
         trace_id_hex = None
         span_id_hex = None
@@ -126,9 +122,7 @@ class TraceLogger(CustomLogger):
         parent_span = NonRecordingSpan(span_context)
         return trace.set_span_in_context(parent_span)
 
-    def _create_llm_span(
-        self, name: str, start_time: Optional[Any] = None
-    ) -> Optional[Any]:
+    def _create_llm_span(self, name: str, start_time: Optional[Any] = None) -> Optional[Any]:
         """Create span for LLM call.
 
         Args:
@@ -141,9 +135,7 @@ class TraceLogger(CustomLogger):
         if start_time:
             # Convert datetime to nanoseconds since epoch for OTEL
             start_time_ns = int(start_time.timestamp() * 1_000_000_000)
-            span = self._tracer.start_span(
-                name, context=parent_ctx, start_time=start_time_ns
-            )
+            span = self._tracer.start_span(name, context=parent_ctx, start_time=start_time_ns)
         else:
             span = self._tracer.start_span(name, context=parent_ctx)
 
@@ -160,12 +152,10 @@ class TraceLogger(CustomLogger):
         return span
 
     @staticmethod
-    def _metadata_context(kwargs: Dict[str, Any]):
+    def _metadata_context(kwargs: dict[str, Any]):
         from ...core.context import Context
 
-        metadata = kwargs.get("litellm_metadata") or kwargs.get(
-            "litellm_params", {}
-        ).get("litellm_metadata", {})
+        metadata = kwargs.get("litellm_metadata") or kwargs.get("litellm_params", {}).get("litellm_metadata", {})
         context = metadata.get("context") if isinstance(metadata, dict) else None
         return context if isinstance(context, Context) else None
 
@@ -173,17 +163,10 @@ class TraceLogger(CustomLogger):
     def _context_log_path(ctx) -> str:
         base = Path(ctx.output_dir) / ctx.run_id
         if ctx.session_id:
-            return str(
-                base
-                / "sessions"
-                / ctx.session_id
-                / ctx.role.value
-                / "litellm"
-                / "trace.jsonl"
-            )
+            return str(base / "sessions" / ctx.session_id / ctx.role.value / "litellm" / "trace.jsonl")
         return str(base / "run" / "litellm" / "trace.jsonl")
 
-    def get_context(self, kwargs: Dict[str, Any]):
+    def get_context(self, kwargs: dict[str, Any]):
         from ...core.context import Context, try_get_context
 
         self._ensure_context()
@@ -195,7 +178,7 @@ class TraceLogger(CustomLogger):
             return context
         return try_get_context()
 
-    def _resolve_log_path(self, kwargs: Dict[str, Any]) -> str:
+    def _resolve_log_path(self, kwargs: dict[str, Any]) -> str:
         from ...core.context import Context
 
         if self._file_path:
@@ -220,9 +203,7 @@ class TraceLogger(CustomLogger):
 
         return DEFAULT_FILE
 
-    def _write_row(
-        self, kwargs: Dict[str, Any], response_obj: Dict[str, Any], status: str
-    ) -> None:
+    def _write_row(self, kwargs: dict[str, Any], response_obj: dict[str, Any], status: str) -> None:
         file_path = self._resolve_log_path(kwargs)
         Path(file_path).parent.mkdir(parents=True, exist_ok=True)
         usage = self._extract_usage(response_obj)
@@ -244,8 +225,8 @@ class TraceLogger(CustomLogger):
 
     def _write_otel(
         self,
-        kwargs: Dict[str, Any],
-        response_obj: Dict[str, Any],
+        kwargs: dict[str, Any],
+        response_obj: dict[str, Any],
         status: str,
         start_time=None,
         end_time=None,
@@ -290,11 +271,7 @@ class TraceLogger(CustomLogger):
             error_info = kwargs.get("exception") or response_obj.get("error")
             if error_info:
                 if isinstance(error_info, dict):
-                    error_type = (
-                        error_info.get("type")
-                        or error_info.get("code")
-                        or "unknown_error"
-                    )
+                    error_type = error_info.get("type") or error_info.get("code") or "unknown_error"
                 elif isinstance(error_info, Exception):
                     error_type = type(error_info).__name__
                 else:
@@ -348,14 +325,10 @@ class TraceLogger(CustomLogger):
 
         # ===== RECOMMENDED REQUEST ATTRIBUTES =====
         if optional_params.get("max_tokens") is not None:
-            span.set_attribute(
-                "gen_ai.request.max_tokens", optional_params["max_tokens"]
-            )
+            span.set_attribute("gen_ai.request.max_tokens", optional_params["max_tokens"])
 
         if optional_params.get("temperature") is not None:
-            span.set_attribute(
-                "gen_ai.request.temperature", optional_params["temperature"]
-            )
+            span.set_attribute("gen_ai.request.temperature", optional_params["temperature"])
 
         if optional_params.get("top_p") is not None:
             span.set_attribute("gen_ai.request.top_p", optional_params["top_p"])
@@ -364,14 +337,10 @@ class TraceLogger(CustomLogger):
             span.set_attribute("gen_ai.request.top_k", float(optional_params["top_k"]))
 
         if optional_params.get("frequency_penalty") is not None:
-            span.set_attribute(
-                "gen_ai.request.frequency_penalty", optional_params["frequency_penalty"]
-            )
+            span.set_attribute("gen_ai.request.frequency_penalty", optional_params["frequency_penalty"])
 
         if optional_params.get("presence_penalty") is not None:
-            span.set_attribute(
-                "gen_ai.request.presence_penalty", optional_params["presence_penalty"]
-            )
+            span.set_attribute("gen_ai.request.presence_penalty", optional_params["presence_penalty"])
 
         # gen_ai.request.stop_sequences (Recommended)
         stop = optional_params.get("stop")
@@ -397,31 +366,21 @@ class TraceLogger(CustomLogger):
             usage = response_obj.get("usage", {})
             if usage:
                 if usage.get("prompt_tokens") is not None:
-                    span.set_attribute(
-                        "gen_ai.usage.input_tokens", usage["prompt_tokens"]
-                    )
+                    span.set_attribute("gen_ai.usage.input_tokens", usage["prompt_tokens"])
                 if usage.get("completion_tokens") is not None:
-                    span.set_attribute(
-                        "gen_ai.usage.output_tokens", usage["completion_tokens"]
-                    )
+                    span.set_attribute("gen_ai.usage.output_tokens", usage["completion_tokens"])
 
             # gen_ai.response.finish_reasons (Recommended)
             choices = response_obj.get("choices", [])
             if choices:
-                finish_reasons = [
-                    choice.get("finish_reason")
-                    for choice in choices
-                    if choice.get("finish_reason")
-                ]
+                finish_reasons = [choice.get("finish_reason") for choice in choices if choice.get("finish_reason")]
                 if finish_reasons:
                     span.set_attribute("gen_ai.response.finish_reasons", finish_reasons)
 
         # ===== OPT-IN ATTRIBUTES (for content recording) =====
         # Note: These are opt-in and may contain sensitive data
         # Only include if explicitly enabled via environment variable
-        record_content = os.environ.get(
-            "EXGENTIC_OTEL_RECORD_CONTENT", "false"
-        ).lower() in {"1", "true", "yes", "on"}
+        record_content = os.environ.get("EXGENTIC_OTEL_RECORD_CONTENT", "false").lower() in {"1", "true", "yes", "on"}
 
         if record_content:
             # gen_ai.input.messages (Opt-In) - structured format
@@ -429,9 +388,7 @@ class TraceLogger(CustomLogger):
             if messages:
                 # Convert to GenAI message format
                 try:
-                    span.set_attribute(
-                        "gen_ai.input.messages", json.dumps(messages, default=str)
-                    )
+                    span.set_attribute("gen_ai.input.messages", json.dumps(messages, default=str))
                 except Exception:
                     pass  # Skip if serialization fails
 
@@ -449,9 +406,7 @@ class TraceLogger(CustomLogger):
                             }
                             content = message.get("content")
                             if content:
-                                output_msg["parts"].append(
-                                    {"type": "text", "content": content}
-                                )
+                                output_msg["parts"].append({"type": "text", "content": content})
                             # Include tool calls if present
                             tool_calls = message.get("tool_calls")
                             if tool_calls:
@@ -461,9 +416,7 @@ class TraceLogger(CustomLogger):
                                             "type": "tool_call",
                                             "id": tc.get("id"),
                                             "name": tc.get("function", {}).get("name"),
-                                            "arguments": tc.get("function", {}).get(
-                                                "arguments"
-                                            ),
+                                            "arguments": tc.get("function", {}).get("arguments"),
                                         }
                                     )
                             finish_reason = choice.get("finish_reason")
@@ -496,9 +449,7 @@ class TraceLogger(CustomLogger):
                 end_time=end_time,
             )
 
-    def log_success_event(
-        self, kwargs: Dict[str, Any], response_obj: Dict[str, Any], start_time, end_time
-    ):
+    def log_success_event(self, kwargs: dict[str, Any], response_obj: dict[str, Any], start_time, end_time):
         self._write_row(kwargs, response_obj, status="success")
         self._write_otel(
             kwargs,
@@ -508,9 +459,7 @@ class TraceLogger(CustomLogger):
             end_time=end_time,
         )
 
-    async def async_log_success_event(
-        self, kwargs: Dict[str, Any], response_obj: Dict[str, Any], start_time, end_time
-    ):
+    async def async_log_success_event(self, kwargs: dict[str, Any], response_obj: dict[str, Any], start_time, end_time):
         self._write_row(kwargs, response_obj, status="success")
         self._write_otel(
             kwargs,
@@ -520,9 +469,7 @@ class TraceLogger(CustomLogger):
             end_time=end_time,
         )
 
-    def log_failure_event(
-        self, kwargs: Dict[str, Any], response_obj: Dict[str, Any], start_time, end_time
-    ):
+    def log_failure_event(self, kwargs: dict[str, Any], response_obj: dict[str, Any], start_time, end_time):
         self._write_row(kwargs, response_obj, status="failure")
         self._write_otel(
             kwargs,
@@ -532,9 +479,7 @@ class TraceLogger(CustomLogger):
             end_time=end_time,
         )
 
-    async def async_log_failure_event(
-        self, kwargs: Dict[str, Any], response_obj: Dict[str, Any], start_time, end_time
-    ):
+    async def async_log_failure_event(self, kwargs: dict[str, Any], response_obj: dict[str, Any], start_time, end_time):
         self._write_row(kwargs, response_obj, status="failure")
         self._write_otel(
             kwargs,
@@ -544,16 +489,14 @@ class TraceLogger(CustomLogger):
             end_time=end_time,
         )
 
-    async def async_log_stream_event(
-        self, kwargs: Dict[str, Any], response_obj: Dict[str, Any], start_time, end_time
-    ):
+    async def async_log_stream_event(self, kwargs: dict[str, Any], response_obj: dict[str, Any], start_time, end_time):
         self._write_row(kwargs, response_obj, status="stream")
         self._write_otel(kwargs, response_obj, status="stream")
 
     # Helpers -----------------------------------------------------
 
-    def _extract_usage(self, response_obj: Any) -> Dict[str, Any]:
-        usage: Dict[str, Any] = {}
+    def _extract_usage(self, response_obj: Any) -> dict[str, Any]:
+        usage: dict[str, Any] = {}
         if isinstance(response_obj, dict):
             usage = response_obj.get("usage", {}) or {}
         else:
@@ -564,8 +507,8 @@ class TraceLogger(CustomLogger):
                 usage = usage_attr.__dict__
         return usage
 
-    def _capture_request(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        safe: Dict[str, Any] = {}
+    def _capture_request(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        safe: dict[str, Any] = {}
         for key in (
             "messages",
             "prompt",
@@ -580,12 +523,12 @@ class TraceLogger(CustomLogger):
                 safe[key] = kwargs[key]
         return safe
 
-    def _capture_response(self, response_obj: Any) -> Dict[str, Any]:
+    def _capture_response(self, response_obj: Any) -> dict[str, Any]:
         if isinstance(response_obj, dict):
             resp = dict(response_obj)
             resp.pop("usage", None)
             return resp
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         for attr in ("choices", "id", "object", "created", "model", "error"):
             if hasattr(response_obj, attr):
                 out[attr] = getattr(response_obj, attr)

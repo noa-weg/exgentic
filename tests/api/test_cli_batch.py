@@ -7,7 +7,6 @@ import csv
 import json
 
 from click.testing import CliRunner
-
 from exgentic.core.types import RunConfig
 from exgentic.interfaces.cli.main import cli
 
@@ -124,7 +123,7 @@ def test_batch_extract_writes_csv(tmp_path):
     )
 
     assert result.exit_code == 0, result.output
-    with open(output_csv, "r", encoding="utf-8", newline="") as f:
+    with open(output_csv, encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
 
