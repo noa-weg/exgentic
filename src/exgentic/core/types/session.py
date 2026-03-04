@@ -52,7 +52,8 @@ class SessionResults(BaseModel):
     task_id: Optional[str] = None
 
     @field_validator("cost_reports", mode="before")
-    def accept_instances(self, v):
+    @classmethod
+    def accept_instances(cls, v):
         if not isinstance(v, dict):
             raise TypeError(f"cost_reports must be a dict[str, CostReport | dict], got {type(v)}")
 

@@ -23,7 +23,7 @@ from rich.text import Text
 
 from ...core.context import get_context
 from ...core.orchestrator.observer import Observer
-from ...core.orchestrator.termination import RunCancel, SessionCancel
+from ...core.orchestrator.termination import RunCancelError, SessionCancelError
 from ...core.types import Action, ModelSettings, SessionOutcomeStatus
 from ...utils.paths import RunPaths, get_run_paths, get_session_paths
 from ...utils.settings import get_settings
@@ -173,7 +173,7 @@ class ConsoleLoggerObserver(Observer, RunRecapMixin):
         session_number = self._ledger.get_number(session_id)
         if not self._enabled(logging.INFO):
             return
-        if isinstance(error, (SessionCancel, RunCancel, KeyboardInterrupt)):
+        if isinstance(error, (SessionCancelError, RunCancelError, KeyboardInterrupt)):
             desc = f"[yellow]Session {session_number} ⏹ cancelled"
         else:
             desc = f"[red]Session {session_number} ✖ error"
