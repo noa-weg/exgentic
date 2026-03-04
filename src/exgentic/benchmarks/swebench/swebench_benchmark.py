@@ -309,7 +309,7 @@ class SWEBenchSession(Session):
                 logger=self.logger,
             )
         except Exception as e:
-            self.logger.error(f"SCORE | Harness evaluation failed: {e}", exc_info=True)
+            self.logger.exception(f"SCORE | Harness evaluation failed: {e}")
             return None
 
     def _generate_current_patch(self) -> Optional[str]:
@@ -324,7 +324,7 @@ class SWEBenchSession(Session):
                 base_commit=self.container_base_commit,
             )
         except Exception as e:
-            self.logger.error(f"SCORE | Patch generation failed: {e}", exc_info=True)
+            self.logger.exception(f"SCORE | Patch generation failed: {e}")
             return None
 
     # -------------------------------------------------------------------------

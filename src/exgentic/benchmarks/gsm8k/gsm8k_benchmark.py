@@ -310,7 +310,7 @@ class GSM8kBenchmark(Benchmark, BaseModel):
                 s = float(payload["score"])  # minimal: assume exists
                 scores.append(s)
             except FileNotFoundError:
-                raise FileNotFoundError(f"Missing benchmark result for session '{paths.session_id}' at {fp}")
+                raise FileNotFoundError(f"Missing benchmark result for session '{paths.session_id}' at {fp}") from None
             except Exception:
                 run_logger.exception(
                     "Failed to load benchmark result for session %s at %s",

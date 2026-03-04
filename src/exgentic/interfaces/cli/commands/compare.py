@@ -82,7 +82,9 @@ def _parse_benchmark_spec(benchmark_spec: str) -> tuple[str, str | None, int | N
         try:
             limit = int(limit_str)
         except ValueError:
-            raise click.ClickException(f"Invalid limit value in benchmark spec: {limit_str}. Must be an integer.")
+            raise click.ClickException(
+                f"Invalid limit value in benchmark spec: {limit_str}. Must be an integer."
+            ) from None
 
     # Check for subset (/subset)
     if "/" in benchmark_spec:

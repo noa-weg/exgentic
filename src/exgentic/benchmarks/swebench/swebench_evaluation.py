@@ -94,5 +94,5 @@ def run_harness(
         logger.info("EVAL | Harness evaluation completed")
         return HarnessResult(report, patch, True, True)
     except Exception as e:
-        logger.error(f"EVAL | Harness evaluation failed: {e}", exc_info=True)
+        logger.exception(f"EVAL | Harness evaluation failed: {e}")
         return HarnessResult({}, patch, True, True, str(e))
