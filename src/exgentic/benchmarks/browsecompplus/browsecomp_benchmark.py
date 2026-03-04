@@ -311,15 +311,14 @@ Finish the session always by calling `submit`. If you fail to find the answer, s
     def get_arguments_dict(self, args):
         if isinstance(args, BaseModel):
             return args.model_dump()  # Pydantic v2
-        elif isinstance(args, Mapping):
+        if isinstance(args, Mapping):
             return dict(args)
-        else:
-            return str(getattr(args, "value", {}))
+        return str(getattr(args, "value", {}))
 
     def get_retrieved_docids(self, result: str):
         try:
             result = json.loads(result)
-            retrieved_docids = set([result.get("docid") for result in result])
+            retrieved_docids = {result.get("docid") for result in result}
             self.retrieved_docids = self.retrieved_docids | retrieved_docids
         except json.decoder.JSONDecodeError:
             self.logger.error(f"Failed to retrieve docids: {result}")
@@ -327,7 +326,7 @@ Finish the session always by calling `submit`. If you fail to find the answer, s
     def record_retrieved_docids(self, result: str):
         try:
             result = json.loads(result)
-            retrieved_docids = set([result.get("docid") for result in result])
+            retrieved_docids = {result.get("docid") for result in result}
             self.retrieved_docids = self.retrieved_docids | retrieved_docids
         except json.decoder.JSONDecodeError:
             self.logger.error(f"Failed to retrieve docids: {result}")

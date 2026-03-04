@@ -256,7 +256,7 @@ def _build_leaderboard_table(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
         how="left",
     ).sort_values("mean_score", ascending=False)
 
-    benchmarks = [col for col in pivot_scores.columns]
+    benchmarks = list(pivot_scores.columns)
     return full_table, benchmarks
 
 

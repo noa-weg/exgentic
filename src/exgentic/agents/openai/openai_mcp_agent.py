@@ -82,6 +82,7 @@ class RetryingLitellmModel(LitellmModel):
                 )
                 if delay > 0:
                     await asyncio.sleep(delay)
+        return None
 
 
 class MCPConfig(BaseModel):
