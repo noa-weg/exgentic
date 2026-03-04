@@ -131,8 +131,9 @@ SessionT = TypeVar("SessionT", bound=BaseProxySession)
 
 
 class BaseProxyAgent(ABC, Generic[SessionT]):
-    """Base mixin providing generic step handling between a proxy session and
-    an external environment. Uses core terms (session, observation, action).
+    """Base mixin providing generic step handling between a proxy session and an external environment.
+
+    Uses core terms (session, observation, action).
 
     Adapters should call `handle_observation(observation, state)` from their
     environment-specific entrypoint.

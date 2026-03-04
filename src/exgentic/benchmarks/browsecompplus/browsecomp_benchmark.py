@@ -178,7 +178,7 @@ Finish the session always by calling `submit`. If you fail to find the answer, s
 
     @property
     def task_id(self) -> str:
-        """Task identifier"""
+        """Task identifier."""
         return str(self._instance["query_id"])
 
     def _to_observation(self, raw: Any, invoking: Optional[List[SingleAction]] = None) -> Observation:

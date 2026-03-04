@@ -73,6 +73,7 @@ class UpdatableCostReport(CostReport):
 
 class LLMCostReport(CostReport):
     """Represents a cost report for LLM usage.
+
     Usage:
         # Explicit definition
         report = CostReport(model_name="gpt-4", input_tokens=100, output_tokens=50, input_cost=0.02, output_cost=0.03)
@@ -115,7 +116,7 @@ class LLMCostReport(CostReport):
         self.output_cost += output_cost
 
     def accumulate_from(self, other: Self) -> None:
-        """Accumulate costs and tokens from other"""
+        """Accumulate costs and tokens from other."""
         self.input_tokens += int(other.input_tokens)
         self.output_tokens += int(other.output_tokens)
         self.input_cost += float(other.input_cost)

@@ -16,7 +16,7 @@ settings = get_settings()
 
 
 class SmolagentCodeAgentInstance(SmolagentBaseAgentInstance):
-    """Smolagent implementation"""
+    """Smolagent implementation."""
 
     def run_smolagent(self, tools: List[Tool]):
         # Load custom structured prompt templates from YAML next to this module

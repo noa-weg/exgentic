@@ -14,7 +14,7 @@ settings = get_settings()
 
 
 class SmolagentToolCallingAgentInstance(SmolagentBaseAgentInstance):
-    """Smolagent implementation"""
+    """Smolagent implementation."""
 
     def run_smolagent(self, tools: List[Tool]):
         self._agent = ToolCallingAgent(

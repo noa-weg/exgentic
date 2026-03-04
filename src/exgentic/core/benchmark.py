@@ -13,7 +13,7 @@ from .types import SessionIndex
 
 
 class Benchmark(BaseModel, ABC):
-    """Benchmark interface - controls evaluation execution and provides sessions"""
+    """Benchmark interface - controls evaluation execution and provides sessions."""
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

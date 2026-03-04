@@ -33,7 +33,8 @@ class CoordinatedAgent(ABC):
 
 
 class AgentCoordinator(AgentInstance):
-    """Coordinates turn-based communication between:
+    """Coordinates turn-based communication between threads.
+
     - an environment thread (react)
     - an internal agent thread (run / execute)
     """
@@ -243,6 +244,7 @@ class AgentCoordinator(AgentInstance):
 
     def execute(self, action: Action | None) -> Observation | None:
         """Publish an action for the current turn.
+
         If action is None, signals agent termination.
         """
         with self._condition:
@@ -278,6 +280,7 @@ class AgentCoordinator(AgentInstance):
 
     def react(self, observation: Observation | None) -> Action | None:
         """Publish an observation and wait for the agent's action.
+
         If observation is None, signals environment termination.
         """
         with self._condition:

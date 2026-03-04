@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
-"""Generic Process Manager
-======================
+"""Generic Process Manager.
 
 Run code in isolated child processes with simple RPC communication.
 

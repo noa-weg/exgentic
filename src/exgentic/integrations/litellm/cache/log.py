@@ -31,8 +31,8 @@ def _cache_log_path(output_dir: str, run_id: str, session_id: Optional[str], rol
 class CacheLogger:
     """File-based cache logger scoped to run + session.
 
-    INFO  – "hit" / "miss" for every lookup
-    DEBUG – structured detail lines and JSON material dumps
+    INFO  - "hit" / "miss" for every lookup
+    DEBUG - structured detail lines and JSON material dumps
     """
 
     def __init__(self, disk_cache_dir: Optional[str], strip_time: bool) -> None:

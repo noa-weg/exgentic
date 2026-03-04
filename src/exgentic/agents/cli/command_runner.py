@@ -67,6 +67,7 @@ class BaseCLIConfig(BaseModel):
 
 class ProcessRunner(abc.ABC):
     """Shared subprocess execution logic (spawn + communicate + timeout + kill).
+
     Concrete runners implement how cmd/env/cfg_root are transformed.
     """
 
@@ -321,6 +322,7 @@ class PodmanRunner(ContainerRunner):
 
     def _resolve_podman_connection_args(self) -> list[str]:
         """Return extra args for the `podman` CLI to select a connection.
+
         Priority:
         1) PODMAN_CONNECTION env var
         2) auto-detect default connection from `podman system connection list --format json`

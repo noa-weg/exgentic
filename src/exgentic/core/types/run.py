@@ -77,7 +77,7 @@ class RunResults(BaseModel):
 
 
 class Integration(BaseModel):
-    """Metadata about a benchmark or agent integration"""
+    """Metadata about a benchmark or agent integration."""
 
     name: str
     type: Literal["benchmark", "agent"]

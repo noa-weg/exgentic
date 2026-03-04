@@ -22,6 +22,7 @@ def _loop_thread_main() -> None:
 
 def run_sync(coro: Coroutine[Any, Any, Any], timeout: float | None = None) -> Any:
     """Run an async coroutine from sync code using ONE long-lived event loop.
+
     Safe from any thread in this process.
 
     Do not call from an async context.

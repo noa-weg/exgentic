@@ -108,6 +108,13 @@ def _load_run_results(
     If model is None, loads results from all models and stores model name in setup_info.
 
     Args:
+        output_dir: Directory containing run outputs
+        agent: Agent name to filter by, or None for all agents
+        model: Model name to filter by, or None for all models
+        benchmark: Benchmark name to search for
+        subset: Optional benchmark subset
+        agent_kwargs: Optional agent configuration parameters
+        benchmark_kwargs: Optional benchmark configuration parameters
         progress: Optional Rich Progress instance for showing progress
         task_id: Optional task ID for updating progress
 
@@ -860,7 +867,7 @@ def compare_cmd(
     output_dir: str,
     output_format: str,
 ) -> None:
-    """Compare performance of multiple agent/model combinations across benchmarks.
+    r"""Compare performance of multiple agent/model combinations across benchmarks.
 
     This command searches the output directory to locate results for each agent/model/benchmark combination.
 

@@ -194,8 +194,7 @@ def get_session_logger(session_root: Path, name: str) -> "OtelLogger":
 
     Args:
         session_root: Path to the session output directory (not run directory)
-        session_id: Unique session identifier to ensure unique logger per session
-        process_name: Name of the process (e.g., "session_span_manager", "otel_callback")
+        name: Name of the logger (e.g., "session_span_manager", "otel_callback")
 
     Returns:
         OtelLogger instance configured for the session

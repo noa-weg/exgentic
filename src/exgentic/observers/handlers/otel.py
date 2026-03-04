@@ -77,7 +77,7 @@ class SessionSpanManager:
         return span
 
     def end_current_span(self) -> None:
-        """End the current span and set parent as current"""
+        """End the current span and set parent as current."""
         if not self._span_stack:
             self._logger.warning("Attempted to end span with empty stack")
             return
@@ -252,7 +252,7 @@ class OtelTracingObserver(Observer):
         self._start_next_step(session.session_id)
 
     def _start_next_step(self, session_id: str) -> None:
-        """Start a new step span and action span"""
+        """Start a new step span and action span."""
         span_manager = self._get_span_manager(session_id)
         step_index = self._session_step_counters[session_id]
         span_manager.start_span("step execute")  # step span

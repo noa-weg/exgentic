@@ -9,7 +9,7 @@ from exgentic.core.types import ModelSettings
 
 
 class SimpleTestAgentInstance(AgentInstance):
-    """Simple test agent that responds with basic actions"""
+    """Simple test agent that responds with basic actions."""
 
     def __init__(self, session_id: str, task: str, context: Dict[str, Any], actions: List[str]):
         super().__init__(session_id)
@@ -19,7 +19,7 @@ class SimpleTestAgentInstance(AgentInstance):
         self.step_count = 0
 
     def react(self, observation: Optional[str]) -> Optional[str]:
-        """React to observation with simple response"""
+        """React to observation with simple response."""
         self.step_count += 1
 
         if observation is None:
@@ -38,7 +38,7 @@ class SimpleTestAgentInstance(AgentInstance):
 
 
 class SimpleTestAgent(Agent):
-    """Agent factory that creates simple test agents"""
+    """Agent factory that creates simple test agents."""
 
     display_name: str = "Simple Test Agent"
     slug_name: str = "simple_test"

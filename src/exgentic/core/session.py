@@ -14,7 +14,7 @@ from .types import Action, ActionType, Observation, SessionScore
 
 
 class Session(ABC):
-    """Session interface - represents one task execution in one environment"""
+    """Session interface - represents one task execution in one environment."""
 
     def __init__(self) -> None:
         # Persist configuration once per session if provided by subclass.
@@ -23,7 +23,7 @@ class Session(ABC):
 
     @property
     def session_id(self) -> str:
-        """Returns a unique id for the session"""
+        """Returns a unique id for the session."""
         if not hasattr(self, "_session_id"):
             self._session_id = secrets.token_hex(4)
         return self._session_id
@@ -108,55 +108,54 @@ class Session(ABC):
 
     @property
     def task_id(self) -> str:
-        """Task identifier"""
+        """Task identifier."""
         return ""
 
     @property
     @abstractmethod
     def task(self) -> str:
-        """Task description - benchmark defines what work to do"""
+        """Task description - benchmark defines what work to do."""
         pass
 
     @property
     @abstractmethod
     def context(self) -> Dict[str, Any]:
-        """Task context - benchmark provides necessary information"""
+        """Task context - benchmark provides necessary information."""
         pass
 
     @property
     @abstractmethod
     def actions(self) -> List[ActionType]:
-        """Available actions - benchmark defines action space"""
+        """Available actions - benchmark defines action space."""
         pass
 
     @abstractmethod
     def start(self) -> Optional[Observation]:
-        """Current observation - session maintains state"""
+        """Current observation - session maintains state."""
         pass
 
     @abstractmethod
     def step(self, action: Action) -> Optional[Observation]:
-        """Execute action - session controls execution, returns None when done"""
+        """Execute action - session controls execution, returns None when done."""
         pass
 
     @abstractmethod
     def done(self) -> bool:
-        """Check completion - session knows when task is finished"""
+        """Check completion - session knows when task is finished."""
         pass
 
     @abstractmethod
     def score(self) -> Dict[str, Any]:
-        """Evaluate performance - session/benchmark controls scoring
+        """Evaluate performance - session/benchmark controls scoring.
 
         Should return at least two fields:
 
         "success" - True iff the session execution completed without an error
         "score" - The score of the session execution, should be None if an error occurred.
-
         """
         pass
 
     @abstractmethod
     def close(self):
-        """Cleanup resources - session manages its own resources"""
+        """Cleanup resources - session manages its own resources."""
         pass

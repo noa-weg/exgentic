@@ -12,7 +12,7 @@ from .types import Action, Observation
 
 
 class AgentInstance(ABC):
-    """Agent instance - handles decision making for one task execution"""
+    """Agent instance - handles decision making for one task execution."""
 
     max_steps: int | None = None
 
@@ -64,16 +64,17 @@ class AgentInstance(ABC):
 
     @abstractmethod
     def react(self, observation: Optional[Observation]) -> Optional[Action]:
-        """React to observation - agent controls decision making, None = done"""
+        """React to observation - agent controls decision making, None = done."""
         pass
 
     def start(self):
         """Start the agent.
-        No-op function for non-coordinated agents
+
+        No-op function for non-coordinated agents.
         """
         return
 
     @abstractmethod
     def close(self) -> None:
-        """Cleanup agent resources - agent manages its own state"""
+        """Cleanup agent resources - agent manages its own state."""
         pass

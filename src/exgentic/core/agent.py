@@ -12,7 +12,7 @@ from .types.model_settings import ModelSettings
 
 
 class Agent(BaseModel, ABC):
-    """Agent factory - creates AgentInstance objects"""
+    """Agent factory - creates AgentInstance objects."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -28,7 +28,7 @@ class Agent(BaseModel, ABC):
         actions: List[ActionType],
         session_id: str,
     ) -> AgentInstance:
-        """Create agent for specific task - agent factory controls instance creation"""
+        """Create agent for specific task - agent factory controls instance creation."""
         pass
 
     # Optional metadata property for dashboard/leaderboards

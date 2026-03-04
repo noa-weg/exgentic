@@ -25,8 +25,9 @@ class Observation(BaseModel, ABC):
 
 
 class SingleObservation(Observation):
-    """Observation that includes a single arbitrary result and a list of actions that invoked it
-    (i.e. the actions that generated it the observation )
+    """Observation that includes a single arbitrary result and a list of actions that invoked it.
+
+    (i.e. the actions that generated it the observation)
 
     To allow the observation to be used in place of the results in CodeAgents,
     we map all the magic methods of the observation to the result object.
@@ -163,7 +164,7 @@ class EmptyObservation(SingleObservation):
 
 
 class MultiObservation(Observation):
-    """An observation which is actually a collection of multiple observations"""
+    """An observation which is actually a collection of multiple observations."""
 
     observations: list[SingleObservation]
 

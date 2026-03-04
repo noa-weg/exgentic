@@ -94,7 +94,7 @@ class HotpotFinishAction(FinishAction):
 
 
 class HotpotQASession(Session):
-    """ """
+    """HotpotQA session for multi-hop question answering."""
 
     _question: str
     _done: bool

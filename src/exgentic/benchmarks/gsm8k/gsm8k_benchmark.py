@@ -140,7 +140,7 @@ class GSM8kFinishAction(FinishAction):
 
 
 class GSM8kSession(Session):
-    """ """
+    """GSM8K session for math problem solving."""
 
     _question: str
     _done: bool

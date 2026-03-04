@@ -11,7 +11,7 @@ from .coordinator import AgentCoordinator, CoordinatedAgent
 
 
 class CodeAgentInstance(CoordinatedAgent, AgentCoordinator):
-    """Base class for code-based agents that inherits both roles"""
+    """Base class for code-based agents that inherits both roles."""
 
     def __init__(
         self,
@@ -59,5 +59,5 @@ class CodeAgentInstance(CoordinatedAgent, AgentCoordinator):
 
     @abstractmethod
     def run_code_agent(self, functions: List[Callable]) -> None:
-        """Subclasses implement their code agent logic here"""
+        """Subclasses implement their code agent logic here."""
         pass

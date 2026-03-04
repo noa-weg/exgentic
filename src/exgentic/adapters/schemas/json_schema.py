@@ -10,8 +10,9 @@ from pydantic import BaseModel
 
 
 def make_args_model_from_json_schema(name: str, parameters: dict[str, Any]) -> type[BaseModel]:
-    """Build a Pydantic v2 model from JSON Schema and verify core semantics match
-    (type/required/properties), ignoring cosmetic keys like 'title'.
+    """Build a Pydantic v2 model from JSON Schema and verify core semantics match.
+
+    Verifies (type/required/properties), ignoring cosmetic keys like 'title'.
     """
     # 1) build
     Model = _schema_to_model(

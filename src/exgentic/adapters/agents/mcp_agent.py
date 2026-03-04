@@ -98,6 +98,7 @@ class MCPAgentInstance(CodeAgentInstance, abc.ABC):
     @abstractmethod
     def run_mcp_agent(self, mcp_host: str, mcp_port: int) -> Any:
         """ABSTRACT SYNC.
+
         Subclass may implement:
           - purely sync logic, OR
           - a sync wrapper over an async core (via run_sync, etc.)
