@@ -1,28 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
-from typing import Dict, Optional, cast
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, Optional, cast
 
-from opentelemetry import trace, context
-from opentelemetry.util.types import AttributeValue
-from opentelemetry.trace import Tracer
+from opentelemetry import context, trace
 from opentelemetry.sdk.trace import Span
+from opentelemetry.trace import Tracer
 from opentelemetry.trace.status import Status, StatusCode
+from opentelemetry.util.types import AttributeValue
 
-from ...utils.paths import get_run_id
+from ...core.context import OtelContext, get_context, set_context
+from ...core.orchestrator.observer import Observer
+from ...interfaces.registry import get_agent_entries, get_benchmark_entries
 from ...utils.otel import (
-    init_tracing_from_env,
     flush_traces,
     get_session_logger,
-    write_attribute,
+    init_tracing_from_env,
     safe_repr,
+    write_attribute,
 )
-from ...core.orchestrator.observer import Observer
-from ...core.context import get_context, set_context, OtelContext
-from ...interfaces.registry import get_agent_entries, get_benchmark_entries
-
+from ...utils.paths import get_run_id
 
 tracer = init_tracing_from_env()
 
@@ -38,9 +37,7 @@ class SessionSpanManager:
 
         # Initialize session logger
         self._logger = get_session_logger(session_root, __name__)
-        self._logger.info(
-            f"SessionSpanManager initialized for session {self.session_id}"
-        )
+        self._logger.info(f"SessionSpanManager initialized for session {self.session_id}")
 
     def start_span(self, name: str, **kwargs) -> Span:
         """Start a new span as a child of the current span.
@@ -50,11 +47,7 @@ class SessionSpanManager:
             **kwargs: Additional arguments passed to tracer.start_span
         """
         parent_span = self._span_stack[-1] if self._span_stack else None
-        ctx = (
-            trace.set_span_in_context(parent_span)
-            if parent_span
-            else context.get_current()
-        )
+        ctx = trace.set_span_in_context(parent_span) if parent_span else context.get_current()
 
         span = cast(Span, self._tracer.start_span(name, context=ctx, **kwargs))
         self._span_stack.append(span)
@@ -65,11 +58,7 @@ class SessionSpanManager:
 
         # Log span start
         span_ctx = span.get_span_context()
-        parent_span_id = (
-            format(parent_span.get_span_context().span_id, "016x")
-            if parent_span
-            else None
-        )
+        parent_span_id = format(parent_span.get_span_context().span_id, "016x") if parent_span else None
         start_time = datetime.fromtimestamp(span.start_time / 1_000_000_000)
 
         self._logger.log_span_start(
@@ -149,9 +138,7 @@ class SessionSpanManager:
         span_ctx = self.current_span.get_span_context()
         self._logger.log_attribute_set(key, value, format(span_ctx.span_id, "016x"))
 
-    def set_attributes(
-        self, attributes: Optional[Dict[str, AttributeValue]] = None, **kwargs
-    ) -> None:
+    def set_attributes(self, attributes: Optional[Dict[str, AttributeValue]] = None, **kwargs) -> None:
         if attributes is None:
             attributes = {}
         attributes.update(kwargs)
@@ -163,9 +150,7 @@ class SessionSpanManager:
         if self.current_span:
             self.set_attribute(key, value)
 
-    def set_heritable_attributes(
-        self, attributes: Optional[Dict[str, AttributeValue]] = None, **kwargs
-    ) -> None:
+    def set_heritable_attributes(self, attributes: Optional[Dict[str, AttributeValue]] = None, **kwargs) -> None:
         if attributes:
             self._heritable_attributes.update(attributes)
         self._heritable_attributes.update(kwargs)
@@ -184,9 +169,7 @@ class SessionSpanManager:
             old_name = getattr(self.current_span, "_name", "unknown")
             self.current_span.update_name(new_name)
             span_ctx = self.current_span.get_span_context()
-            self._logger.log_span_rename(
-                old_name, new_name, format(span_ctx.span_id, "016x")
-            )
+            self._logger.log_span_rename(old_name, new_name, format(span_ctx.span_id, "016x"))
 
 
 # OBSERVER
@@ -214,14 +197,8 @@ class OtelTracingObserver(Observer):
     def on_run_start(self, run_config) -> None:
         bench_entry = get_benchmark_entries().get(run_config.benchmark)
         agent_entry = get_agent_entries().get(run_config.agent)
-        bench_name = (
-            bench_entry.display_name
-            if bench_entry is not None
-            else run_config.benchmark
-        )
-        agent_name = (
-            agent_entry.display_name if agent_entry is not None else run_config.agent
-        )
+        bench_name = bench_entry.display_name if bench_entry is not None else run_config.benchmark
+        agent_name = agent_entry.display_name if agent_entry is not None else run_config.agent
         self._run_attributes = {
             "benchmark.name": bench_name,
             "benchmark.agent.name": agent_name,
@@ -229,9 +206,7 @@ class OtelTracingObserver(Observer):
         }
 
     def on_session_start(self, session, agent, observation) -> None:
-        span_manager = SessionSpanManager(
-            session.session_id, self.paths.session(session.session_id).root
-        )
+        span_manager = SessionSpanManager(session.session_id, self.paths.session(session.session_id).root)
         self._span_managers[session.session_id] = span_manager
         self._session_step_counters[session.session_id] = 0
 
@@ -253,30 +228,18 @@ class OtelTracingObserver(Observer):
         )
         span_manager.set_attribute("session.path", safe_repr(session.paths.root))
         for action in session.actions:
-            span_manager.set_attribute(
-                f"session.action.{action.name}.name", action.name
-            )
-            span_manager.set_attribute(
-                f"session.action.{action.name}.description", action.description
-            )
-            span_manager.set_attribute(
-                f"session.action.{action.name}.is_message", action.is_message
-            )
-            span_manager.set_attribute(
-                f"session.action.{action.name}.is_finish", action.is_finish
-            )
+            span_manager.set_attribute(f"session.action.{action.name}.name", action.name)
+            span_manager.set_attribute(f"session.action.{action.name}.description", action.description)
+            span_manager.set_attribute(f"session.action.{action.name}.is_message", action.is_message)
+            span_manager.set_attribute(f"session.action.{action.name}.is_finish", action.is_finish)
         for k, v in session.context.items():
             span_manager.set_attribute(f"context.{k}", v)
         span_manager.set_attribute("session.agent.id", agent.agent_id)
-        span_manager.set_attribute(
-            "session.agent.path", safe_repr(agent.paths.agent_dir)
-        )
+        span_manager.set_attribute("session.agent.path", safe_repr(agent.paths.agent_dir))
 
         # Start first step span for initial observation
         span_manager.start_span("step execute")
-        span_manager.set_heritable_attribute(
-            "step.index", self._session_step_counters[session.session_id]
-        )
+        span_manager.set_heritable_attribute("step.index", self._session_step_counters[session.session_id])
 
         # Record initial observation
         span_manager.start_span("observation get")
@@ -299,19 +262,12 @@ class OtelTracingObserver(Observer):
     def _record_observation(self, session_id: str, observation) -> None:
         """Record observation details on the current span."""
         span_manager = self._get_span_manager(session_id)
-        observation_list = (
-            observation.to_observation_list() if observation is not None else []
-        )
+        observation_list = observation.to_observation_list() if observation is not None else []
         observation_repr = safe_repr(observation_list[0]) if observation_list else ""
 
         span_manager.set_attribute("observation.repr", observation_repr)
         span_manager.set_attribute("observation", safe_repr(observation))
-        span_manager.set_attributes(
-            {
-                f"observation.{i}": safe_repr(obs)
-                for i, obs in enumerate(observation_list)
-            }
-        )
+        span_manager.set_attributes({f"observation.{i}": safe_repr(obs) for i, obs in enumerate(observation_list)})
 
     def _record_action(self, session_id: str, action) -> None:
         """Record action details on the current span."""
@@ -321,9 +277,7 @@ class OtelTracingObserver(Observer):
 
         span_manager.set_attribute("action.repr", action_repr)
         span_manager.set_attribute("action", safe_repr(action))
-        span_manager.set_attributes(
-            {f"action.{i}": safe_repr(act) for i, act in enumerate(action_list)}
-        )
+        span_manager.set_attributes({f"action.{i}": safe_repr(act) for i, act in enumerate(action_list)})
 
     def on_react_success(self, session, action) -> None:
         span_manager = self._get_span_manager(session.session_id)
@@ -370,9 +324,7 @@ class OtelTracingObserver(Observer):
         span_manager.set_attribute("score.success", score.success)
         span_manager.set_attribute("score", score.score)
         span_manager.set_attribute("score.is_finished", score.is_finished)
-        span_manager.set_attribute(
-            "session.steps", self._session_step_counters[session.session_id]
-        )
+        span_manager.set_attribute("session.steps", self._session_step_counters[session.session_id])
         span_manager.set_attribute("agent.agent_cost", agent.get_cost())
         span_manager.set_attribute("session.cost", session.get_cost())
         span_manager.set_attribute("session.task_id", session.task_id)

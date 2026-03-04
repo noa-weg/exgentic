@@ -1,17 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
-from smolagents import ToolCallingAgent
+from typing import ClassVar, List
 
+from smolagents import ToolCallingAgent
 from smolagents.tools import Tool
 from smolagents.utils import AgentError
-from typing import List, ClassVar
-
-from .base_agent import SmolagentBaseAgent, SmolagentBaseAgentInstance
-
 
 from ...utils.settings import get_settings
-
+from .base_agent import SmolagentBaseAgent, SmolagentBaseAgentInstance
 
 settings = get_settings()
 
@@ -31,10 +28,7 @@ class SmolagentToolCallingAgentInstance(SmolagentBaseAgentInstance):
         if self.context:
             prompt += f"Context: {self.context}\n\n"
         prompt += "Complete this task using the available tools. Each tool corresponds to an action you can take in the environment.\n"
-        if (
-            self.initial_observation is not None
-            and not self.initial_observation.is_empty()
-        ):
+        if self.initial_observation is not None and not self.initial_observation.is_empty():
             text = str(self.initial_observation).strip()
             if text:
                 prompt += f"\nFirst Observation: {text}\n"

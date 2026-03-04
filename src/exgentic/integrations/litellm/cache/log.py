@@ -21,9 +21,7 @@ def _resolve_session_id() -> Optional[str]:
     return None
 
 
-def _cache_log_path(
-    output_dir: str, run_id: str, session_id: Optional[str], role: str, filename: str
-) -> Path:
+def _cache_log_path(output_dir: str, run_id: str, session_id: Optional[str], role: str, filename: str) -> Path:
     base = Path(output_dir) / run_id
     if session_id:
         return base / "sessions" / session_id / role / "litellm" / filename
@@ -97,13 +95,9 @@ class CacheLogger:
             self._init_logged = False
 
         if not logger.handlers:
-            path = _cache_log_path(
-                ctx.output_dir, ctx.run_id, session_id, role, "cache.log"
-            )
+            path = _cache_log_path(ctx.output_dir, ctx.run_id, session_id, role, "cache.log")
             path.parent.mkdir(parents=True, exist_ok=True)
-            level = (
-                logging.DEBUG if get_settings().log_level == "DEBUG" else logging.INFO
-            )
+            level = logging.DEBUG if get_settings().log_level == "DEBUG" else logging.INFO
             handler = logging.FileHandler(path, encoding="utf-8")
             handler.setLevel(level)
             handler.setFormatter(logging.Formatter("%(message)s"))

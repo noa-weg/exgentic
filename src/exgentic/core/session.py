@@ -42,17 +42,13 @@ class Session(ABC):
                     output_dir=ctx.output_dir,
                 )
             else:
-                self._paths = SessionPaths(
-                    session_id=self.session_id, run_id="default", output_dir="outputs"
-                )
+                self._paths = SessionPaths(session_id=self.session_id, run_id="default", output_dir="outputs")
         return self._paths
 
     @property
     def logger(self) -> Logger:
         if not hasattr(self, "_logger"):
-            self._logger = get_logger(
-                f"Session_{self.session_id}", str(self.paths.session_log)
-            )
+            self._logger = get_logger(f"Session_{self.session_id}", str(self.paths.session_log))
         return self._logger
 
     def get_config(self) -> Dict[str, Any]:

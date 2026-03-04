@@ -2,7 +2,7 @@
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, Dict, List, Any
+from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, ConfigDict
 
@@ -44,4 +44,4 @@ class Agent(BaseModel, ABC):
 
     def close(self) -> None:
         """Optional cleanup hook for agent factories."""
-        return None
+        return

@@ -215,12 +215,7 @@ def create_ui() -> None:
     dark.disable()
 
     with ui.row().classes("w-full items-center justify-between"):
-        logo_path = (
-            ASSETS_DIR.parent.parent
-            / "misc"
-            / "assets"
-            / "exgentic_banner_black_no_background.png"
-        )
+        logo_path = ASSETS_DIR.parent.parent / "misc" / "assets" / "exgentic_banner_black_no_background.png"
         if logo_path.is_file():
             ui.image(logo_path).classes("app-logo").props("fit=contain")
         with ui.tabs() as main_tabs:

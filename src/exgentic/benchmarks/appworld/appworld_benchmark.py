@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-import json
 import shutil
 from pathlib import Path
 from shutil import copytree
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Literal, Optional, Set
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -19,27 +19,25 @@ from pydantic import (
     create_model,
 )
 
-from ...core.session import Session
-
+from ...adapters.executors.executer import make_executer
+from ...core.actions import ActionsHandler
 from ...core.benchmark import Benchmark
+from ...core.session import Session
 from ...core.types import (
     Action,
     ActionType,
-    MessageAction,
-    Observation,
-    FinishAction,
-    SingleAction,
-    SingleObservation,
-    SessionScore,
     BenchmarkResults,
     EmptyObservation,
+    FinishAction,
+    MessageAction,
+    Observation,
     SessionIndex,
+    SessionScore,
+    SingleAction,
+    SingleObservation,
 )
-from ...adapters.executors.executer import make_executer
-from ...utils.settings import get_settings
-from ...core.actions import ActionsHandler
 from ...utils.paths import get_run_id, get_run_paths
-
+from ...utils.settings import get_settings
 
 # NOTE: Avoid importing AppWorld modules at import-time to ensure warnings
 # capture (configured by run observers) is active before any third-party
@@ -77,8 +75,8 @@ class AppWorldSession(Session):
     def __init__(
         self,
         session_id: Optional[str] = None,
-        task_spec: Optional[Dict[str, Any]] = None,
-        env_kwargs: Optional[Dict[str, Any]] = None,
+        task_spec: Optional[dict[str, Any]] = None,
+        env_kwargs: Optional[dict[str, Any]] = None,
         use_cache: bool = True,
         tool_name_separator: str = ".",
         max_interactions: Optional[int] = None,
@@ -103,39 +101,28 @@ class AppWorldSession(Session):
         self._cached_score: Optional[SessionScore] = None
 
         # Resolve task_id
-        task_id = (
-            self._task_spec.get("task_id")
-            if isinstance(self._task_spec, dict)
-            else None
-        )
+        task_id = self._task_spec.get("task_id") if isinstance(self._task_spec, dict) else None
         if isinstance(self._task_spec, str):
             task_id = self._task_spec
         if not task_id:
-            raise ValueError(
-                "AppWorldSession requires task_spec with 'task_id' or be a task_id string"
-            )
+            raise ValueError("AppWorldSession requires task_spec with 'task_id' or be a task_id string")
         self._task_id = str(task_id)
 
         # Construct AppWorld in-process (lazy import to defer side effects)
-        from appworld.environment import AppWorld  # type: ignore
         from appworld.common.constants import DEFAULT_EXPERIMENT_NAME  # type: ignore
         from appworld.common.path_store import path_store  # type: ignore
+        from appworld.environment import AppWorld  # type: ignore
 
         self._world: AppWorld = AppWorld(task_id=self._task_id, **self._env_kwargs)
-        self._experiment_name: str = (
-            self._world.experiment_name or DEFAULT_EXPERIMENT_NAME
-        )
+        self._experiment_name: str = self._world.experiment_name or DEFAULT_EXPERIMENT_NAME
         self._task_output_dir: Path = (
-            Path(path_store.experiment_outputs)
-            / self._experiment_name
-            / "tasks"
-            / self._task_id
+            Path(path_store.experiment_outputs) / self._experiment_name / "tasks" / self._task_id
         )
 
         self.logger.info(f"Task ID: {task_spec}")
         super().__init__()
 
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         return {
             "task_spec": self._task_spec,
             "env_kwargs": self._env_kwargs,
@@ -153,7 +140,7 @@ class AppWorldSession(Session):
         return "Task from supervisor:\n" + self.world.task.instruction
 
     @property
-    def context(self) -> Dict[str, Any]:
+    def context(self) -> dict[str, Any]:
         if self.world.task is None:
             raise ValueError("AppWorld task is not initialized")
 
@@ -190,7 +177,7 @@ class AppWorldSession(Session):
         }
 
     @property
-    def actions(self) -> List[ActionType]:
+    def actions(self) -> list[ActionType]:
         if not self._registry.actions:
             # Build ActionTypes from AppWorld function_calling docs to leverage enriched auth parameters
             from ...adapters.schemas.json_schema import make_args_model_from_json_schema
@@ -242,12 +229,10 @@ class AppWorldSession(Session):
         return str(self._task_id)
 
     @property
-    def _actions_names(self) -> Set[str]:
+    def _actions_names(self) -> set[str]:
         return {a.name for a in self.actions}
 
-    def _to_observation(
-        self, raw: Any, invoking: Optional[List[SingleAction]] = None
-    ) -> Observation:
+    def _to_observation(self, raw: Any, invoking: Optional[list[SingleAction]] = None) -> Observation:
         return AppWorldObservation(invoking_actions=invoking or [], result=raw)
 
     def start(self) -> Optional[Observation]:
@@ -285,9 +270,7 @@ class AppWorldSession(Session):
         if isinstance(arguments, BaseModel):
             arguments = arguments.model_dump()
 
-        self.logger.info(
-            f"App: {app_name}, Function: {api_name}, Arguments: {arguments}"
-        )
+        self.logger.info(f"App: {app_name}, Function: {api_name}, Arguments: {arguments}")
 
         try:
             out = self.world.requester.request(app_name, api_name, **arguments)
@@ -350,8 +333,8 @@ class AppWorldSession(Session):
         if self._cached_score is not None:
             return self._cached_score
         # World was already saved and closed in close(); compute the actual evaluation score now.
-        from appworld.evaluator import evaluate_task
         from appworld.apps.lib.models.db import CachedDBHandler
+        from appworld.evaluator import evaluate_task
 
         test_tracker = evaluate_task(
             task_id=self._task_id,
@@ -489,12 +472,12 @@ class AppWorldSession(Session):
 class AppWorldBenchmark(Benchmark, BaseModel):
     display_name: ClassVar[str] = "AppWorld"
     slug_name: ClassVar[str] = "appworld"
-    available_subsets: ClassVar[List[str]] = ["train", "dev", "test_normal"]
+    available_subsets: ClassVar[list[str]] = ["train", "dev", "test_normal"]
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # Inputs
     subset: Literal["train", "dev", "test_normal"] = "test_normal"
-    env_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    env_kwargs: dict[str, Any] = Field(default_factory=dict)
     max_interactions: int = 200
     tool_name_separator: Literal[".", "__"] = "__"
     SCORES_FILE_NAME: ClassVar[str] = "scores.json"
@@ -502,14 +485,14 @@ class AppWorldBenchmark(Benchmark, BaseModel):
     # Internals
     _experiment_name: str = PrivateAttr(default="")
 
-    def list_subsets(self) -> List[str]:  # type: ignore[override]
+    def list_subsets(self) -> list[str]:  # type: ignore[override]
         return list(self.available_subsets)
 
-    def list_tasks(self) -> List[str]:  # type: ignore[override]
+    def list_tasks(self) -> list[str]:  # type: ignore[override]
         from appworld.task import load_task_ids  # type: ignore
 
         self._ensure_appworld_root()
-        items: Optional[List[str]] = load_task_ids(self.subset)
+        items: Optional[list[str]] = load_task_ids(self.subset)
         if not items:
             return []
         return [str(t) for t in items]
@@ -547,21 +530,16 @@ class AppWorldBenchmark(Benchmark, BaseModel):
     def _stage_task_outputs(
         self,
         *,
-        task_ids: List[str],
-        task_to_session: Dict[str, str],
+        task_ids: list[str],
+        task_to_session: dict[str, str],
         temp_output_dir: Path,
     ) -> None:
         run_paths = get_run_paths()
         for task_id in task_ids:
             session_id = task_to_session.get(task_id)
             if not session_id:
-                raise FileNotFoundError(
-                    f"Missing session mapping for AppWorld task '{task_id}'."
-                )
-            session_task_output = (
-                run_paths.session(session_id).benchmark_dir
-                / AppWorldSession.TASK_OUTPUT_SUBDIR
-            )
+                raise FileNotFoundError(f"Missing session mapping for AppWorld task '{task_id}'.")
+            session_task_output = run_paths.session(session_id).benchmark_dir / AppWorldSession.TASK_OUTPUT_SUBDIR
             if not session_task_output.exists():
                 raise FileNotFoundError(
                     "Missing staged task output for "
@@ -571,7 +549,7 @@ class AppWorldBenchmark(Benchmark, BaseModel):
             dest_task_dir.parent.mkdir(parents=True, exist_ok=True)
             copytree(session_task_output, dest_task_dir)
 
-    def aggregate_sessions(self, sessions: List[SessionIndex]) -> BenchmarkResults:
+    def aggregate_sessions(self, sessions: list[SessionIndex]) -> BenchmarkResults:
         from appworld.evaluator import Metric, TestTracker  # type: ignore
 
         self._ensure_appworld_root()
@@ -585,17 +563,14 @@ class AppWorldBenchmark(Benchmark, BaseModel):
             )
 
         run_paths = get_run_paths()
-        task_id_to_test_tracker: Dict[str, TestTracker] = {}
+        task_id_to_test_tracker: dict[str, TestTracker] = {}
         for session in sessions:
             task_id = str(session.task_id)
             results_path = run_paths.session(session.session_id).results
-            scores_path = (
-                run_paths.session(session.session_id).benchmark_dir
-                / self.SCORES_FILE_NAME
-            )
+            scores_path = run_paths.session(session.session_id).benchmark_dir / self.SCORES_FILE_NAME
 
             if scores_path.exists():
-                with open(scores_path, "r", encoding="utf-8") as f:
+                with open(scores_path, encoding="utf-8") as f:
                     scores_payload = json.load(f)
                 tracker = scores_payload.get("test_tracker")
             else:
@@ -607,13 +582,9 @@ class AppWorldBenchmark(Benchmark, BaseModel):
                     scores_path,
                     results_path,
                 )
-                with open(results_path, "r", encoding="utf-8") as f:
+                with open(results_path, encoding="utf-8") as f:
                     payload = json.load(f)
-                tracker = (
-                    (payload.get("details") or {})
-                    .get("session_metadata", {})
-                    .get("test_tracker")
-                )
+                tracker = (payload.get("details") or {}).get("session_metadata", {}).get("test_tracker")
             if not isinstance(tracker, dict):
                 raise ValueError(
                     "Missing test_tracker in aggregation source for "
@@ -621,13 +592,9 @@ class AppWorldBenchmark(Benchmark, BaseModel):
                     f"Checked {scores_path} and fallback {results_path}."
                 )
 
-            task_id_to_test_tracker[task_id] = TestTracker.from_dict(
-                tracker, suppress_errors=False
-            )
+            task_id_to_test_tracker[task_id] = TestTracker.from_dict(tracker, suppress_errors=False)
 
-        evaluation_dict = Metric.compute_metrics(
-            task_id_to_test_tracker, include_details=True
-        )
+        evaluation_dict = Metric.compute_metrics(task_id_to_test_tracker, include_details=True)
         report = Metric.build_report(evaluation_dict)
         return BenchmarkResults(
             benchmark_name="appworld",

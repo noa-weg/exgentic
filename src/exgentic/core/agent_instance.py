@@ -49,17 +49,13 @@ class AgentInstance(ABC):
                     output_dir=ctx.output_dir,
                 )
             else:
-                self._paths = SessionPaths(
-                    session_id=self.session_id, run_id="default", output_dir="outputs"
-                )
+                self._paths = SessionPaths(session_id=self.session_id, run_id="default", output_dir="outputs")
         return self._paths
 
     @property
     def logger(self):
         if not hasattr(self, "_logger"):
-            self._logger = get_logger(
-                f"Agent_{self.agent_id}", str(self.paths.agent_log)
-            )
+            self._logger = get_logger(f"Agent_{self.agent_id}", str(self.paths.agent_log))
         return self._logger
 
     def get_cost(self) -> CostReport:
@@ -72,8 +68,9 @@ class AgentInstance(ABC):
         pass
 
     def start(self):
-        """start the agent.
-        No-op function for non-coordinated agents"""
+        """Start the agent.
+        No-op function for non-coordinated agents
+        """
         return
 
     @abstractmethod

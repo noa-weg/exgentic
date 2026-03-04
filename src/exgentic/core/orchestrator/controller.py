@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
-from dataclasses import dataclass
 import threading
+from dataclasses import dataclass
 
 from ..types import Action, Observation
 from .cleanup import close_aiohttp_sessions_silently

@@ -6,11 +6,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rich_click as click
-import matplotlib.pyplot as plt
-
 
 BENCHMARK_MAP = {
     "appworld_test_normal": "AppWorld",
@@ -90,9 +89,7 @@ def _normalize_results_df(df: pd.DataFrame) -> pd.DataFrame:
     elif "benchmark_score" in out.columns:
         out["score"] = _coerce_numeric(out, "benchmark_score")
     else:
-        raise click.ClickException(
-            "CSV missing benchmark_score (average_score is not allowed)."
-        )
+        raise click.ClickException("CSV missing benchmark_score (average_score is not allowed).")
 
     if "avg_steps" not in out.columns and "average_steps" in out.columns:
         out["avg_steps"] = _coerce_numeric(out, "average_steps")
@@ -152,9 +149,7 @@ def _compute_weighted_scores(df: pd.DataFrame) -> dict[tuple[str, str], float]:
     return config_scores
 
 
-def _compute_pareto_frontier(
-    points: list[tuple[float, float]]
-) -> list[tuple[float, float]]:
+def _compute_pareto_frontier(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     pareto: list[tuple[float, float]] = []
     for i, (x1, y1) in enumerate(points):
         is_pareto = True
@@ -182,9 +177,7 @@ def _build_leaderboard_table(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
     )
 
     config_metrics = []
-    for (agent, model), group in valid_df.groupby(
-        ["agent_normalized", "model_normalized"]
-    ):
+    for (agent, model), group in valid_df.groupby(["agent_normalized", "model_normalized"]):
         mean_score = np.average(group["score"], weights=group["benchmark_weight"])
 
         if "avg_steps" in group.columns and group["avg_steps"].notna().any():
@@ -249,15 +242,11 @@ def _build_leaderboard_table(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]
     win_rates = {}
     for config in config_points:
         if config_weighted_comparisons[config] > 0:
-            win_rates[config] = (
-                config_points[config] / config_weighted_comparisons[config]
-            )
+            win_rates[config] = config_points[config] / config_weighted_comparisons[config]
         else:
             win_rates[config] = np.nan
 
-    config_df["win_rate"] = config_df.apply(
-        lambda row: win_rates.get((row["agent"], row["model"]), np.nan), axis=1
-    )
+    config_df["win_rate"] = config_df.apply(lambda row: win_rates.get((row["agent"], row["model"]), np.nan), axis=1)
 
     pivot_scores_reset = pivot_scores.reset_index()
     full_table = config_df.merge(
@@ -363,9 +352,7 @@ def analyse_cmd() -> None:
 
 
 @analyse_cmd.command("leaderboard")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_leaderboard_cmd(csv_path: Path) -> None:
     """Generate leaderboard table from a results CSV."""
     df = pd.read_csv(csv_path)
@@ -374,9 +361,7 @@ def analyse_leaderboard_cmd(csv_path: Path) -> None:
 
 
 @analyse_cmd.command("leaderboard-paper")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option(
     "--output",
     "output_path",
@@ -473,11 +458,7 @@ def analyse_leaderboard_paper_cmd(csv_path: Path, output_path: Path | None) -> N
         ]
         for bench in ordered_benchmarks:
             score = row.get(bench, np.nan)
-            score_cell = (
-                f"{{\\scriptsize {fmt_score(score)}}}"
-                if pd.notna(score)
-                else "{\\scriptsize --}"
-            )
+            score_cell = f"{{\\scriptsize {fmt_score(score)}}}" if pd.notna(score) else "{\\scriptsize --}"
             if prefix:
                 score_cell = rf"\cellcolor{{rowgray}}{score_cell}"
             cells.append(score_cell)
@@ -495,18 +476,14 @@ def analyse_leaderboard_paper_cmd(csv_path: Path, output_path: Path | None) -> N
 
     latex = header + "\n".join(rows) + footer
     if output_path is None:
-        output_path = (
-            _project_root() / "misc" / "paper" / "tables" / "leaderboard_paper.tex"
-        )
+        output_path = _project_root() / "misc" / "paper" / "tables" / "leaderboard_paper.tex"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(latex, encoding="utf-8")
     click.echo(f"Saved to {output_path}")
 
 
 @analyse_cmd.command("model-agent")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_model_agent_cmd(csv_path: Path) -> None:
     """Model vs agent variance, pair means, and interaction analysis."""
     _, valid_df = _load_normalized_frames(csv_path)
@@ -516,9 +493,7 @@ def analyse_model_agent_cmd(csv_path: Path) -> None:
 
     def weighted_std(group):
         wmean = np.average(group["score"], weights=group["benchmark_weight"])
-        variance = np.average(
-            (group["score"] - wmean) ** 2, weights=group["benchmark_weight"]
-        )
+        variance = np.average((group["score"] - wmean) ** 2, weights=group["benchmark_weight"])
         return np.sqrt(variance)
 
     agent_means = valid_df.groupby("agent_normalized").apply(weighted_mean)
@@ -527,15 +502,9 @@ def analyse_model_agent_cmd(csv_path: Path) -> None:
     valid_df["model_mean"] = valid_df["model_normalized"].map(model_means)
 
     grand_mean = np.average(valid_df["score"], weights=valid_df["benchmark_weight"])
-    total_var = np.average(
-        (valid_df["score"] - grand_mean) ** 2, weights=valid_df["benchmark_weight"]
-    )
-    agent_var = np.average(
-        (valid_df["agent_mean"] - grand_mean) ** 2, weights=valid_df["benchmark_weight"]
-    )
-    model_var = np.average(
-        (valid_df["model_mean"] - grand_mean) ** 2, weights=valid_df["benchmark_weight"]
-    )
+    total_var = np.average((valid_df["score"] - grand_mean) ** 2, weights=valid_df["benchmark_weight"])
+    agent_var = np.average((valid_df["agent_mean"] - grand_mean) ** 2, weights=valid_df["benchmark_weight"])
+    model_var = np.average((valid_df["model_mean"] - grand_mean) ** 2, weights=valid_df["benchmark_weight"])
 
     click.echo("MODEL VS AGENT (benchmark-weighted)")
     click.echo(f"Total variance: {total_var:.4f}")
@@ -545,11 +514,7 @@ def analyse_model_agent_cmd(csv_path: Path) -> None:
     click.echo("\nBy Model (weighted):")
     by_model = (
         valid_df.groupby("model_normalized")
-        .apply(
-            lambda g: pd.Series(
-                {"mean": weighted_mean(g), "std": weighted_std(g), "count": len(g)}
-            )
-        )
+        .apply(lambda g: pd.Series({"mean": weighted_mean(g), "std": weighted_std(g), "count": len(g)}))
         .round(3)
     )
     click.echo(by_model.to_string())
@@ -557,28 +522,18 @@ def analyse_model_agent_cmd(csv_path: Path) -> None:
     click.echo("\nBy Agent (weighted):")
     by_agent = (
         valid_df.groupby("agent_normalized")
-        .apply(
-            lambda g: pd.Series(
-                {"mean": weighted_mean(g), "std": weighted_std(g), "count": len(g)}
-            )
-        )
+        .apply(lambda g: pd.Series({"mean": weighted_mean(g), "std": weighted_std(g), "count": len(g)}))
         .round(3)
     )
     click.echo(by_agent.to_string())
 
     click.echo("\nAgent-Model pair weighted means:")
-    pair_means = (
-        valid_df.groupby(["agent_normalized", "model_normalized"])
-        .apply(weighted_mean)
-        .round(3)
-    )
+    pair_means = valid_df.groupby(["agent_normalized", "model_normalized"]).apply(weighted_mean).round(3)
     for (agent, model), score in pair_means.items():
         click.echo(f"{agent:<20} {model:<20} {score:>10.3f}")
 
     click.echo("\nInteraction analysis (cell means):")
-    cell_means = valid_df.groupby(["model_normalized", "agent_normalized"])[
-        "score"
-    ].mean()
+    cell_means = valid_df.groupby(["model_normalized", "agent_normalized"])["score"].mean()
     df_cells = cell_means.reset_index()
     grand_mean = df_cells["score"].mean()
     model_effects = df_cells.groupby("model_normalized")["score"].mean() - grand_mean
@@ -602,9 +557,7 @@ def analyse_model_agent_cmd(csv_path: Path) -> None:
 
 
 @analyse_cmd.command("model-win-rate")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_model_win_rate_cmd(csv_path: Path) -> None:
     """Model win rate (TauBench weighted)."""
     _, valid_df = _load_normalized_frames(csv_path)
@@ -639,15 +592,11 @@ def analyse_model_win_rate_cmd(csv_path: Path) -> None:
     for model in sorted(model_points.keys()):
         if model_weighted_comparisons[model] > 0:
             win_rate = model_points[model] / model_weighted_comparisons[model]
-            click.echo(
-                f"{model:<20} {100*win_rate:>9.1f}% {model_weighted_comparisons[model]:>20.1f}"
-            )
+            click.echo(f"{model:<20} {100*win_rate:>9.1f}% {model_weighted_comparisons[model]:>20.1f}")
 
 
 @analyse_cmd.command("config-win-rate")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_config_win_rate_cmd(csv_path: Path) -> None:
     """Top configuration win rates (TauBench weighted)."""
     _, valid_df = _load_normalized_frames(csv_path)
@@ -687,9 +636,7 @@ def analyse_config_win_rate_cmd(csv_path: Path) -> None:
     for config in config_points:
         if config_weighted_comparisons[config] > 0:
             win_rate = config_points[config] / config_weighted_comparisons[config]
-            config_win_rates.append(
-                (config, win_rate, config_weighted_comparisons[config])
-            )
+            config_win_rates.append((config, win_rate, config_weighted_comparisons[config]))
     config_win_rates.sort(key=lambda x: x[1], reverse=True)
 
     click.echo(f"{'Agent':<20} {'Model':<20} {'Win Rate':>10} {'Weighted Comps':>15}")
@@ -699,9 +646,7 @@ def analyse_config_win_rate_cmd(csv_path: Path) -> None:
 
 
 @analyse_cmd.command("best-per-benchmark")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_best_per_benchmark_cmd(csv_path: Path) -> None:
     """Best configuration per benchmark (top 3)."""
     _, valid_df = _load_normalized_frames(csv_path)
@@ -711,20 +656,14 @@ def analyse_best_per_benchmark_cmd(csv_path: Path) -> None:
         click.echo(f"\n{bench}:")
         click.echo(f"  Winner: {best['agent_normalized']} + {best['model_normalized']}")
         click.echo(f"  Score: {best['score']:.3f}")
-        top3 = bench_df.nlargest(3, "score")[
-            ["agent_normalized", "model_normalized", "score"]
-        ]
+        top3 = bench_df.nlargest(3, "score")[["agent_normalized", "model_normalized", "score"]]
         click.echo("  Top 3:")
         for _, row in top3.iterrows():
-            click.echo(
-                f"    {row['agent_normalized']:20s} + {row['model_normalized']:20s} = {row['score']:.3f}"
-            )
+            click.echo(f"    {row['agent_normalized']:20s} + {row['model_normalized']:20s} = {row['score']:.3f}")
 
 
 @analyse_cmd.command("tool-shortlist")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_tool_shortlist_cmd(csv_path: Path) -> None:
     """Tool shortlisting effect (AppWorld)."""
     df, _ = _load_normalized_frames(csv_path)
@@ -733,12 +672,10 @@ def analyse_tool_shortlist_cmd(csv_path: Path) -> None:
     for model in ["gpt-5.2", "claude-opus-4.5", "gemini-3-pro"]:
         click.echo(f"\n{model}:")
         no_shortlist = appworld[
-            (appworld["model_normalized"] == model)
-            & (appworld["agent_normalized"] == "litellm-react")
+            (appworld["model_normalized"] == model) & (appworld["agent_normalized"] == "litellm-react")
         ]
         with_shortlist = appworld[
-            (appworld["model_normalized"] == model)
-            & (appworld["agent_normalized"] == "litellm-shortlist")
+            (appworld["model_normalized"] == model) & (appworld["agent_normalized"] == "litellm-shortlist")
         ]
         if len(no_shortlist) > 0:
             score_no = no_shortlist["score"].values[0]
@@ -756,9 +693,7 @@ def analyse_tool_shortlist_cmd(csv_path: Path) -> None:
 
 
 @analyse_cmd.command("cost-efficiency")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_cost_efficiency_cmd(csv_path: Path) -> None:
     """Cost-efficiency analysis (benchmark-weighted)."""
     _, valid_df = _load_normalized_frames(csv_path)
@@ -773,9 +708,7 @@ def analyse_cost_efficiency_cmd(csv_path: Path) -> None:
             lambda g: pd.Series(
                 {
                     "score": np.average(g["score"], weights=g["benchmark_weight"]),
-                    "avg_cost": np.average(
-                        g["avg_cost"], weights=g["benchmark_weight"]
-                    ),
+                    "avg_cost": np.average(g["avg_cost"], weights=g["benchmark_weight"]),
                 }
             )
         )
@@ -783,9 +716,7 @@ def analyse_cost_efficiency_cmd(csv_path: Path) -> None:
     )
     by_config["efficiency"] = by_config["score"] / by_config["avg_cost"]
     top_efficient = by_config.nlargest(10, "efficiency")
-    click.echo(
-        f"{'Agent':<20} {'Model':<20} {'Score':>8} {'Cost':>10} {'Efficiency':>12}"
-    )
+    click.echo(f"{'Agent':<20} {'Model':<20} {'Score':>8} {'Cost':>10} {'Efficiency':>12}")
     click.echo("-" * 75)
     for _, row in top_efficient.iterrows():
         click.echo(
@@ -795,9 +726,7 @@ def analyse_cost_efficiency_cmd(csv_path: Path) -> None:
 
 
 @analyse_cmd.command("component-impact")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_component_impact_cmd(csv_path: Path) -> None:
     """Component impact analysis."""
     _, valid_df = _load_normalized_frames(csv_path)
@@ -840,24 +769,16 @@ def analyse_component_impact_cmd(csv_path: Path) -> None:
     }
 
     for comp in ["runtime", "shortlist", "schema_guard", "memory", "planning"]:
-        valid_df[comp] = valid_df["agent_normalized"].apply(
-            lambda a: agent_components.get(a, {}).get(comp, False)
-        )
+        valid_df[comp] = valid_df["agent_normalized"].apply(lambda a: agent_components.get(a, {}).get(comp, False))
 
-    click.echo(
-        f"{'Component':<15} {'With':>8} {'Without':>8} {'Delta':>8} {'N_with':>8} {'N_without':>10}"
-    )
+    click.echo(f"{'Component':<15} {'With':>8} {'Without':>8} {'Delta':>8} {'N_with':>8} {'N_without':>10}")
     click.echo("-" * 70)
     for comp in ["runtime", "shortlist", "schema_guard", "memory", "planning"]:
         with_comp_df = valid_df[valid_df[comp]]
         without_comp_df = valid_df[~valid_df[comp]]
         if len(with_comp_df) > 0 and len(without_comp_df) > 0:
-            mean_with = np.average(
-                with_comp_df["score"], weights=with_comp_df["benchmark_weight"]
-            )
-            mean_without = np.average(
-                without_comp_df["score"], weights=without_comp_df["benchmark_weight"]
-            )
+            mean_with = np.average(with_comp_df["score"], weights=with_comp_df["benchmark_weight"])
+            mean_without = np.average(without_comp_df["score"], weights=without_comp_df["benchmark_weight"])
             delta = mean_with - mean_without
             click.echo(
                 f"{comp.replace('_', ' ').title():<15} {mean_with:>8.3f} {mean_without:>8.3f} "
@@ -866,9 +787,7 @@ def analyse_component_impact_cmd(csv_path: Path) -> None:
 
 
 @analyse_cmd.command("correlation")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def analyse_correlation_cmd(csv_path: Path) -> None:
     """Cross-benchmark rank correlation."""
     _, valid_df = _load_normalized_frames(csv_path)
@@ -891,9 +810,7 @@ def analyse_correlation_cmd(csv_path: Path) -> None:
 
 
 @analyse_cmd.command("cost-score")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option(
     "--output",
     "output_path",
@@ -911,11 +828,7 @@ def analyse_cost_score_cmd(csv_path: Path, output_path: Path | None) -> None:
         raise click.ClickException("avg_cost is required for cost-score plot.")
 
     cost_df = df[df["avg_cost"].notna()].copy()
-    cost_by_config = (
-        cost_df.groupby(["agent_normalized", "model_normalized"])
-        .agg({"avg_cost": "mean"})
-        .reset_index()
-    )
+    cost_by_config = cost_df.groupby(["agent_normalized", "model_normalized"]).agg({"avg_cost": "mean"}).reset_index()
 
     agent_display_names = {
         "claude-code": "Claude Code",
@@ -1071,9 +984,7 @@ def analyse_cost_score_cmd(csv_path: Path, output_path: Path | None) -> None:
     )
 
     if output_path is None:
-        output_path = (
-            _project_root() / "misc" / "paper" / "figures" / "cost_performance.pdf"
-        )
+        output_path = _project_root() / "misc" / "paper" / "figures" / "cost_performance.pdf"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -1091,9 +1002,7 @@ def _save_pdf_png(fig: Any, output_pdf: Path) -> None:
 
 
 @analyse_cmd.command("paper-figures")
-@click.argument(
-    "csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
-)
+@click.argument("csv_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option(
     "--outdir",
     type=click.Path(file_okay=False, path_type=Path),
@@ -1108,9 +1017,7 @@ def analyse_paper_figures_cmd(csv_path: Path, outdir: Path | None) -> None:
     outdir.mkdir(parents=True, exist_ok=True)
 
     # 1) Cost-performance (reuse existing command output default file name).
-    analyse_cost_score_cmd.callback(
-        csv_path=csv_path, output_path=outdir / "cost_performance.pdf"
-    )  # type: ignore[attr-defined]
+    analyse_cost_score_cmd.callback(csv_path=csv_path, output_path=outdir / "cost_performance.pdf")  # type: ignore[attr-defined]
 
     # 2) Results heatmap (config x benchmark).
     heat = valid_df.pivot_table(
@@ -1154,9 +1061,7 @@ def analyse_paper_figures_cmd(csv_path: Path, outdir: Path | None) -> None:
         "openai-mcp": "MCP",
         "claude-code": "MCP",
     }
-    by_protocol = valid_df.assign(
-        protocol=valid_df["agent_normalized"].map(protocol_map)
-    ).dropna(subset=["protocol"])
+    by_protocol = valid_df.assign(protocol=valid_df["agent_normalized"].map(protocol_map)).dropna(subset=["protocol"])
     agg = (
         by_protocol.groupby(["benchmark", "protocol"])["score"]
         .mean()
@@ -1215,9 +1120,7 @@ def analyse_paper_figures_cmd(csv_path: Path, outdir: Path | None) -> None:
     components = ["runtime", "shortlist", "schema_guard", "memory", "planning"]
     deltas = []
     for comp in components:
-        tmp[comp] = tmp["agent_normalized"].apply(
-            lambda a: agent_components.get(a, {}).get(comp, False)
-        )
+        tmp[comp] = tmp["agent_normalized"].apply(lambda a: agent_components.get(a, {}).get(comp, False))
         with_comp = tmp[tmp[comp]]["score"]
         without_comp = tmp[~tmp[comp]]["score"]
         if len(with_comp) and len(without_comp):

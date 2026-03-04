@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
-from ..context import session_scope, agent_scope, benchmark_scope
+from ..context import agent_scope, benchmark_scope, session_scope
 from ..types import SessionConfig, SessionIndex
 from .controller import Controller
 from .observer import Observer
@@ -36,9 +36,7 @@ def run_session(
         tracker = Tracker(observers=observers, controllers=controllers)
 
     session_id = session_config.get_session_id()
-    session = benchmark.create_session(
-        SessionIndex(task_id=str(session_config.task_id), session_id=session_id)
-    )
+    session = benchmark.create_session(SessionIndex(task_id=str(session_config.task_id), session_id=session_id))
     with session_scope(session.session_id, task_id=session.task_id):
         agent_instance = agent.assign(
             task=session.task,

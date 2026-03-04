@@ -1,33 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
-"""
-Utility functions for OpenTelemetry initialization and logging.
+"""Utility functions for OpenTelemetry initialization and logging.
 
 This module provides OTEL setup functions and structured logging for OTEL operations.
 """
 
-import os
-import math
-from datetime import datetime
 import json
+import math
+import os
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-from opentelemetry.util.types import AttributeValue
 from opentelemetry import trace
-from opentelemetry.trace import Tracer
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+    OTLPSpanExporter as GrpcOTLPSpanExporter,
+)
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    OTLPSpanExporter as HttpOTLPSpanExporter,
+)
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import Span, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
 from opentelemetry.sdk.trace.id_generator import IdGenerator
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-    OTLPSpanExporter as HttpOTLPSpanExporter,
-)
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-    OTLPSpanExporter as GrpcOTLPSpanExporter,
-)
-
+from opentelemetry.trace import Tracer
+from opentelemetry.util.types import AttributeValue
 
 OTEL_SPAN_ATTRIBUTE_NAMESPACE = "exgentic"
 
@@ -150,16 +148,12 @@ def safe_kv(v: Any) -> Any:
         return str(v)
 
 
-def sanitize_attribute(
-    name: str, value: AttributeValue
-) -> Tuple[str, Optional[AttributeValue]]:
+def sanitize_attribute(name: str, value: AttributeValue) -> Tuple[str, Optional[AttributeValue]]:
     """Sanitize attribute name and value for JSON encoding."""
     if not isinstance(name, str):
         raise TypeError(f"Attribute name must be a string. Got type {type(name)}")
     sanitized = safe_kv(value)
-    if isinstance(sanitized, float) and (
-        math.isnan(sanitized) or math.isinf(sanitized)
-    ):
+    if isinstance(sanitized, float) and (math.isnan(sanitized) or math.isinf(sanitized)):
         # Note: logger warnings are handled at session level
         return name, None
     return name, sanitized
@@ -283,16 +277,10 @@ class OtelLogger:
         root_marker = " [ROOT]" if is_root else ""
         status_info = f" status={status}" if status else ""
         depth_info = f" depth={depth}" if depth is not None else ""
-        time_info = (
-            f" end_time={end_time.strftime('%Y-%m-%d %H:%M:%S.%f')}" if end_time else ""
-        )
-        self.info(
-            f"SPAN_END{root_marker} | name='{span_name}' id={span_id}{status_info}{depth_info}{time_info}"
-        )
+        time_info = f" end_time={end_time.strftime('%Y-%m-%d %H:%M:%S.%f')}" if end_time else ""
+        self.info(f"SPAN_END{root_marker} | name='{span_name}' id={span_id}{status_info}{depth_info}{time_info}")
 
-    def log_attribute_set(
-        self, key: str, value: Any, span_id: Optional[str] = None
-    ) -> None:
+    def log_attribute_set(self, key: str, value: Any, span_id: Optional[str] = None) -> None:
         span_info = f" span={span_id}" if span_id else ""
         # Truncate long values
         value_str = str(value)
@@ -304,9 +292,7 @@ class OtelLogger:
         context_str = f" context={context}" if context else ""
         self.error(f"EXCEPTION | {type(exc).__name__}: {exc}{context_str}")
 
-    def log_context_update(
-        self, trace_id: Optional[str], span_id: Optional[str], operation: str = "update"
-    ) -> None:
+    def log_context_update(self, trace_id: Optional[str], span_id: Optional[str], operation: str = "update") -> None:
         """Log OTEL context update operation."""
         self.debug(f"CONTEXT_{operation.upper()} | trace={trace_id} span={span_id}")
 

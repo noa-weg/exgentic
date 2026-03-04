@@ -2,11 +2,11 @@
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
 import datetime
-from collections import defaultdict
 import json
 import os
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Literal, ClassVar, Mapping
+from typing import Any, ClassVar, Dict, List, Literal, Mapping, Optional
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,32 +14,31 @@ from scripts_evaluation.evaluate_with_openai import (
     calculate_calibration_error,
 )
 
-from .search_tool_handler import BCPSearchToolHandler
+from ...adapters.executors.executer import make_executer
+from ...core import Benchmark, Session
 from ...core.actions import ActionsHandler
+from ...core.types import (
+    Action,
+    ActionType,
+    BenchmarkResults,
+    EmptyObservation,
+    FinishAction,
+    MessageAction,
+    Observation,
+    SessionIndex,
+    SessionScore,
+    SingleAction,
+    SingleObservation,
+)
+from ...utils.cost import CostReport, LiteLLMCostReport
+from ...utils.settings import ExecuterName, ExgenticSettings, get_settings
 from .browsecomp_eval import (
     BrowseCompEvaluator,
     BrowseCompEvaluatorOpenai,
     BrowsecompEvaluatorQwen,
 )
+from .search_tool_handler import BCPSearchToolHandler
 from .searcher_cache import SearchDiskCacheSession
-from ...utils.cost import CostReport, LiteLLMCostReport
-from ...core import Benchmark, Session
-from ...core.types import (
-    Action,
-    MessageAction,
-    FinishAction,
-    SingleAction,
-    ActionType,
-    SingleObservation,
-    Observation,
-    BenchmarkResults,
-    SessionScore,
-    EmptyObservation,
-    SessionIndex,
-)
-from ...adapters.executors.executer import make_executer
-from ...utils.settings import ExecuterName, ExgenticSettings, get_settings
-
 
 # Paper-reported total for the full BrowseCompPlus dataset.
 DEFAULT_TOTAL_TASKS = 830
@@ -68,9 +67,7 @@ class BrowseCompPlusFinishArgs(BaseModel):
     explanation: str = Field(
         description="Your explanation for your final answer. For this explanation section only, you should cite your evidence documents inline by enclosing their docids in square brackets [] at the end of sentences. For example, [20]."
     )
-    confidence: float = Field(
-        description="Your confidence score between 0% and 100% for your answer"
-    )
+    confidence: float = Field(description="Your confidence score between 0% and 100% for your answer")
 
 
 class BrowseCompPlusFinishAction(FinishAction):
@@ -114,14 +111,13 @@ class BrowseCompPlusSession(Session):
 
     def _init_search_tool_handler(self, searcher_params: Dict[str, Any]) -> None:
         """Initialize search tool handler using singleton service."""
-        from .search_service import get_search_service
         from searcher.searchers import SearcherType
+
+        from .search_service import get_search_service
 
         # Get searcher from singleton service
         search_service = get_search_service()
-        searcher_class = SearcherType.get_searcher_class(
-            searcher_params["searcher_type"]
-        )
+        searcher_class = SearcherType.get_searcher_class(searcher_params["searcher_type"])
 
         # Extract searcher-specific args
         searcher_args = {
@@ -156,11 +152,7 @@ class BrowseCompPlusSession(Session):
 
     @property
     def task(self) -> str:
-        get_doc_str = (
-            "and document expansion "
-            if self.search_tool_handler.include_get_document
-            else ""
-        )
+        get_doc_str = "and document expansion " if self.search_tool_handler.include_get_document else ""
         return f"""Answer the provided question by performing search {get_doc_str}as needed, and submit your final answer.
 Question: {self._instance["query"]}
 Note:
@@ -189,18 +181,14 @@ Finish the session always by calling `submit`. If you fail to find the answer, s
         """Task identifier"""
         return str(self._instance["query_id"])
 
-    def _to_observation(
-        self, raw: Any, invoking: Optional[List[SingleAction]] = None
-    ) -> Observation:
+    def _to_observation(self, raw: Any, invoking: Optional[List[SingleAction]] = None) -> Observation:
         return SingleObservation(invoking_actions=invoking or [], result=raw)
 
     def start(self):
         return EmptyObservation()
 
     def record_single_action(self, action: SingleAction) -> None:
-        self.logger.info(
-            f"Received *{action.name}* action with arguments: {action.arguments}"
-        )
+        self.logger.info(f"Received *{action.name}* action with arguments: {action.arguments}")
         self.tool_call_count[action.name] += 1
         self.total_actions_executed += 1
 
@@ -209,9 +197,7 @@ Finish the session always by calling `submit`. If you fail to find the answer, s
             self._done = True
 
         if self.total_actions_executed >= self.max_interactions:
-            self.logger.info(
-                f"Reached maximal limit of {self.total_actions_executed} allowed actions"
-            )
+            self.logger.info(f"Reached maximal limit of {self.total_actions_executed} allowed actions")
             self._done = True
 
         if self._done:
@@ -254,9 +240,7 @@ Finish the session always by calling `submit`. If you fail to find the answer, s
 
     def get_cost(self) -> CostReport:
         if not self.model_usage:
-            return LiteLLMCostReport.initialize_empty(
-                model_name=self.evaluator.eval_model_id
-            )
+            return LiteLLMCostReport.initialize_empty(model_name=self.evaluator.eval_model_id)
 
         return LiteLLMCostReport.from_token_counts(
             model_name=self.evaluator.eval_model_id,
@@ -410,12 +394,8 @@ class BrowseCompPlusBenchmark(Benchmark, BaseModel):
     def extract_dataset(self):
         data_path = self.assets_dir / "data" / "browsecomp_plus_decrypted_docids.jsonl"
         if not data_path.exists():
-            raise Exception(
-                f"{data_path} does not exist. Benchmark must be set up before use."
-            )
-        instances = pd.read_json(path_or_buf=data_path, lines=True).to_dict(
-            orient="records"
-        )
+            raise Exception(f"{data_path} does not exist. Benchmark must be set up before use.")
+        instances = pd.read_json(path_or_buf=data_path, lines=True).to_dict(orient="records")
 
         def proces_instance(instance):
             processed_instance = {
@@ -496,16 +476,12 @@ class BrowseCompPlusBenchmark(Benchmark, BaseModel):
         for paths in self.get_sessions_paths(sessions):
             fp = paths.benchmark_results
             if not fp.exists():
-                raise FileNotFoundError(
-                    f"Missing results for planned session '{paths.session_id}' at {fp}"
-                )
+                raise FileNotFoundError(f"Missing results for planned session '{paths.session_id}' at {fp}")
 
-            with open(fp, "r", encoding="utf-8-sig") as f:
+            with open(fp, encoding="utf-8-sig") as f:
                 payload = json.load(f)
             if not payload:
-                raise ValueError(
-                    f"Empty benchmark results for session '{paths.session_id}' at {fp}"
-                )
+                raise ValueError(f"Empty benchmark results for session '{paths.session_id}' at {fp}")
 
             s = float(payload["score"])  # minimal: assume exists
             scores.append(s)
@@ -514,9 +490,7 @@ class BrowseCompPlusBenchmark(Benchmark, BaseModel):
                 print(f"No metrics for session '{paths.session_id}' at {fp}")
 
             retrieval_recall = metrics.get("Retrieval_recall", 0)
-            retrieval_recalls.append(
-                float(retrieval_recall) if retrieval_recall is not None else 0
-            )
+            retrieval_recalls.append(float(retrieval_recall) if retrieval_recall is not None else 0)
             correctness.append(payload.get("success", 0))
 
             confidence = metrics.get("Confidence")
@@ -532,29 +506,19 @@ class BrowseCompPlusBenchmark(Benchmark, BaseModel):
             tool_call_counts_list.append(metadata.get("tool_call_counts", {}))
 
         avg = sum(scores) / len(scores) if scores else 0.0
-        avg_retrieval_recalls = (
-            sum(retrieval_recalls) / len(retrieval_recalls)
-            if retrieval_recalls
-            else 0.0
-        )
+        avg_retrieval_recalls = sum(retrieval_recalls) / len(retrieval_recalls) if retrieval_recalls else 0.0
         tools_keys = set().union(*tool_call_counts_list)
         avg_tool_use_counts = {
-            k: sum(d.get(k, 0) for d in tool_call_counts_list)
-            / len(tool_call_counts_list)
-            for k in tools_keys
+            k: sum(d.get(k, 0) for d in tool_call_counts_list) / len(tool_call_counts_list) for k in tools_keys
         }
 
         calibration_error = None
         # calibration error only comupted for a large number of examples
         if len(correctness) >= 100:
             try:
-                calibration_error = calculate_calibration_error(
-                    confidences=confidence_list, correctness=correctness
-                )
+                calibration_error = calculate_calibration_error(confidences=confidence_list, correctness=correctness)
             except Exception:
-                print(
-                    f"Failed to calculate calibration error for session '{paths.session_id}' at {fp}"
-                )
+                print(f"Failed to calculate calibration error for session '{paths.session_id}' at {fp}")
                 calibration_error = 0
         metrics = {
             "LLM": self.inference_model,
