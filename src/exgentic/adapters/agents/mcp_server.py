@@ -58,11 +58,13 @@ class MCPServer:
             str(self._mcp_log_dir / "server.log"),
         )
         ts = self._mcp.settings.transport_security
-        ts.allowed_hosts = list(ts.allowed_hosts) + [
+        ts.allowed_hosts = [
+            *ts.allowed_hosts,
             "host.containers.internal:*",
             "host.docker.internal:*",
         ]
-        ts.allowed_origins = list(ts.allowed_origins) + [
+        ts.allowed_origins = [
+            *ts.allowed_origins,
             "http://host.containers.internal:*",
             "http://host.docker.internal:*",
         ]

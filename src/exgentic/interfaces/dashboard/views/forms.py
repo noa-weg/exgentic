@@ -60,7 +60,7 @@ def _build_pydantic_form(model_cls: type[Any], disabled: bool) -> dict[str, Any]
                 options = list(get_args(base))
 
             if options:
-                shown = [""] + options if is_opt and default is None else options
+                shown = ["", *options] if is_opt and default is None else options
                 value = default if default in shown else (shown[0] if shown else None)
                 control = ui.select(shown, value=value, label=name).props("dense")
                 control.enabled = not disabled

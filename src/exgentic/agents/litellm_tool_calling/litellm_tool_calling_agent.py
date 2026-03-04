@@ -378,7 +378,7 @@ class LiteLLMToolCallingAgentInstance(AgentInstance):
                 return response
             except NonRetryableCompletionError:
                 raise
-            except Exception as exc:
+            except Exception:
                 if attempt >= num_retries:
                     raise
                 delay = self.model_settings.retry_after

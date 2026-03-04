@@ -447,7 +447,7 @@ def history_panel(state: RunState) -> None:
                 parent = os.path.dirname(current.rstrip(os.sep))
                 entries = [name for name in sorted(os.listdir(current)) if os.path.isdir(os.path.join(current, name))]
                 if parent and parent != current:
-                    entries = [".."] + entries
+                    entries = ["..", *entries]
                 if not entries:
                     ui.label("(empty)")
                     return

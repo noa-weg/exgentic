@@ -303,10 +303,9 @@ Finish the session always by calling `submit`. If you fail to find the answer, s
     def get_evaluator(self, eval_model_id):
         if "gpt" in eval_model_id:
             return BrowseCompEvaluatorOpenai(eval_model_id=eval_model_id)
-        elif eval_model_id == "Qwen/Qwen3-32B":
+        if eval_model_id == "Qwen/Qwen3-32B":
             return BrowsecompEvaluatorQwen()  # Currently not supported
-        else:
-            raise ValueError(f"Invalid eval_model_id: {eval_model_id}")
+        raise ValueError(f"Invalid eval_model_id: {eval_model_id}")
 
     # Robustly extract the answer from pydantic model or dict
     def get_arguments_dict(self, args):

@@ -127,7 +127,7 @@ class LitellmProxy:
         # Keep proxy cache bootstrap behavior enabled by default for subprocess startup.
         env["EXGENTIC_PROXY_CACHE_INIT"] = "true"
 
-        env["PYTHONPATH"] = os.pathsep.join(extra_paths + [env.get("PYTHONPATH", "")])
+        env["PYTHONPATH"] = os.pathsep.join([*extra_paths, env.get("PYTHONPATH", "")])
         return env
 
     def _resolve_usage_log_path(self) -> Path:
