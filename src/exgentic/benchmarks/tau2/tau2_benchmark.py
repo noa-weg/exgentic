@@ -490,6 +490,7 @@ class TAU2ProxyAgent(LLMAgent, PairableProxyAgent[TAU2Session]):
     @classmethod
     def is_stop(cls, message: AssistantMessage) -> bool:
         """Check if the message is a stop message.
+
         By default the agent does not stop.
         """
         return message.content == "__done__"

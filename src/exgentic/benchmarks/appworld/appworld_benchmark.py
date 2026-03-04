@@ -202,32 +202,32 @@ class AppWorldSession(Session):
                 if api == "show_active_task":
                     continue
 
-                Args = make_args_model_from_json_schema(name, function["parameters"])
+                args_model = make_args_model_from_json_schema(name, function["parameters"])
 
                 if raw_name == "supervisor__complete_task":
-                    FinishAct = create_model(
+                    finish_action_model = create_model(
                         "AppWorldFinishAction",
                         __base__=FinishAction,
-                        arguments=(Args, ...),
+                        arguments=(args_model, ...),
                     )
                     self._registry.add_action(
                         name="finish",
                         description=function["description"],
-                        action_cls=FinishAct,
+                        action_cls=finish_action_model,
                         handler=self.apply_action,
                         is_finish=True,
                     )
                 else:
-                    Act = create_model(
+                    action_model = create_model(
                         f"{name}_Action",
                         __base__=SingleAction,
                         name=(Literal[name], name),
-                        arguments=(Args, ...),
+                        arguments=(args_model, ...),
                     )
                     self._registry.add_action(
                         name=name,
                         description=function["description"],
-                        action_cls=Act,
+                        action_cls=action_model,
                         handler=self.apply_action,
                     )
         return self._registry.actions

@@ -28,15 +28,15 @@ def openai_tools_to_action_types(tools: list[dict[str, Any]]) -> list[ActionType
         desc = fn.get("description") or ""
         params = fn.get("parameters") or {}
 
-        Args = make_args_model_from_json_schema(name, params)
+        args_model = make_args_model_from_json_schema(name, params)
 
-        Act = create_model(
+        action_model = create_model(
             f"{name}_Action",
             __base__=SingleAction,
             name=(Literal[name], name),
-            arguments=(Args, ...),
+            arguments=(args_model, ...),
         )
-        actions.append(ActionType(name=name, description=str(desc), cls=Act))
+        actions.append(ActionType(name=name, description=str(desc), cls=action_model))
 
     if not actions:
         raise ValueError("No OpenAI function tools provided to translate into ActionTypes")

@@ -32,7 +32,7 @@ class TestBenchmark(Benchmark):
     display_name: ClassVar[str] = "Test Benchmark"
     slug_name: ClassVar[str] = "test_benchmark"
 
-    tasks: list[str] = ["task-1", "task-2", "task-3"]
+    tasks: ClassVar[list[str]] = ["task-1", "task-2", "task-3"]
     stop_on_step: bool = False
     invalid_observation: bool = False
 

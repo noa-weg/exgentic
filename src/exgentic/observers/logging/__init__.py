@@ -39,7 +39,7 @@ def _build_console_handler(*, log_level: int, formatter: logging.Formatter) -> l
 
 def get_logger(
     name: str,
-    log_file_path: str = None,
+    log_file_path: str | None = None,
     *,
     console: bool | None = None,
     propagate: bool | None = None,

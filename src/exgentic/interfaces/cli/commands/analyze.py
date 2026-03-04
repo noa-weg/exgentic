@@ -780,7 +780,7 @@ def analyse_component_impact_cmd(csv_path: Path) -> None:
     }
 
     for comp in ["runtime", "shortlist", "schema_guard", "memory", "planning"]:
-        valid_df[comp] = valid_df["agent_normalized"].apply(lambda a: agent_components.get(a, {}).get(comp, False))
+        valid_df[comp] = valid_df["agent_normalized"].apply(lambda a, c=comp: agent_components.get(a, {}).get(c, False))
 
     click.echo(f"{'Component':<15} {'With':>8} {'Without':>8} {'Delta':>8} {'N_with':>8} {'N_without':>10}")
     click.echo("-" * 70)
@@ -1131,7 +1131,7 @@ def analyse_paper_figures_cmd(csv_path: Path, outdir: Path | None) -> None:
     components = ["runtime", "shortlist", "schema_guard", "memory", "planning"]
     deltas = []
     for comp in components:
-        tmp[comp] = tmp["agent_normalized"].apply(lambda a: agent_components.get(a, {}).get(comp, False))
+        tmp[comp] = tmp["agent_normalized"].apply(lambda a, c=comp: agent_components.get(a, {}).get(c, False))
         with_comp = tmp[tmp[comp]]["score"]
         without_comp = tmp[~tmp[comp]]["score"]
         if len(with_comp) and len(without_comp):

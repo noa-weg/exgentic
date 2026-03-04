@@ -29,9 +29,8 @@ class SimpleTestAgentInstance(AgentInstance):
         # Simple logic: respond a few times then finish
         if self.step_count <= 2:
             return f"Responding to: {observation}"
-        else:
-            # Signal completion
-            return None
+        # Signal completion
+        return None
 
     def close(self):
         pass

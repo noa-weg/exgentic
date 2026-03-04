@@ -15,7 +15,7 @@ def make_args_model_from_json_schema(name: str, parameters: dict[str, Any]) -> t
     Verifies (type/required/properties), ignoring cosmetic keys like 'title'.
     """
     # 1) build
-    Model = _schema_to_model(
+    model = _schema_to_model(
         schema=parameters,
         base_model_type=BaseModel,
         root_schema=None,
@@ -23,7 +23,7 @@ def make_args_model_from_json_schema(name: str, parameters: dict[str, Any]) -> t
         allow_undefined_type=False,
     )
 
-    return Model
+    return model
 
 
 def _schema_to_type(schema: dict[str, Any]) -> Any:

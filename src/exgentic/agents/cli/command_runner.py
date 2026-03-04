@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import abc
 import json
 import os
 import shlex
@@ -65,7 +64,7 @@ class BaseCLIConfig(BaseModel):
     env: Optional[dict[str, str]] = None
 
 
-class ProcessRunner(abc.ABC):
+class ProcessRunner:
     """Shared subprocess execution logic (spawn + communicate + timeout + kill).
 
     Concrete runners implement how cmd/env/cfg_root are transformed.

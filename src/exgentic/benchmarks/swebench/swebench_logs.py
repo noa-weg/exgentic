@@ -125,7 +125,7 @@ def _parse_harness_files(paths: SessionPaths, patch: Dict) -> tuple:
             try:
                 report = json.loads(path.read_text())
                 if len(report) == 1:
-                    data = list(report.values())[0]
+                    data = next(iter(report.values()))
                     container["patch_exists"] = data["patch_exists"]
                     container["patch_applied"] = data["patch_successfully_applied"]
                     evaluation["resolved"] = data["resolved"]
