@@ -14,8 +14,8 @@ from ...core.orchestrator.termination import (
     BenchmarkError,
     InvalidActionError,
     InvalidObservationError,
-    RunCancel,
-    SessionCancel,
+    RunCancelError,
+    SessionCancelError,
 )
 from ...core.types import (
     Action,
@@ -113,7 +113,7 @@ class ResultsObserver(Observer):
             error_source = "agent"
         elif isinstance(error, BenchmarkError):
             error_source = "benchmark"
-        if isinstance(error, (SessionCancel, RunCancel, KeyboardInterrupt)):
+        if isinstance(error, (SessionCancelError, RunCancelError, KeyboardInterrupt)):
             self._set_reason(session, "cancelled by user")
             error_source = "cancelled"
         else:

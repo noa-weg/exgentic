@@ -18,8 +18,8 @@ from ...core.orchestrator.observer import Observer
 from ...core.orchestrator.termination import (
     AgentError,
     BenchmarkError,
-    RunCancel,
-    SessionCancel,
+    RunCancelError,
+    SessionCancelError,
 )
 from ...core.types import BenchmarkResults, SessionScore
 from ...utils.paths import RunPaths
@@ -260,7 +260,7 @@ class DashboardEventsObserver(Observer):
             error_source = "agent"
         elif isinstance(error, BenchmarkError):
             error_source = "benchmark"
-        elif isinstance(error, (SessionCancel, RunCancel, KeyboardInterrupt)):
+        elif isinstance(error, (SessionCancelError, RunCancelError, KeyboardInterrupt)):
             error_source = "cancelled"
         root_error = error.error if isinstance(error, (AgentError, BenchmarkError)) else None
         error_message = str(root_error) if root_error else str(error)

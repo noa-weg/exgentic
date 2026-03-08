@@ -11,8 +11,8 @@ from ...core.orchestrator.termination import (
     BenchmarkError,
     InvalidActionError,
     InvalidObservationError,
-    RunCancel,
-    SessionCancel,
+    RunCancelError,
+    SessionCancelError,
 )
 from ...core.types import Action, Observation, SessionResults, SessionScore
 from ...interfaces.registry import get_agent_entries, get_benchmark_entries
@@ -142,7 +142,7 @@ class FileLoggerObserver(Observer):
             error_source = "agent"
         elif isinstance(error, BenchmarkError):
             error_source = "benchmark"
-        if isinstance(error, (SessionCancel, RunCancel, KeyboardInterrupt)):
+        if isinstance(error, (SessionCancelError, RunCancelError, KeyboardInterrupt)):
             self._set_reason(session, "cancelled by user", overwrite=True)
             error_source = "cancelled"
         else:
