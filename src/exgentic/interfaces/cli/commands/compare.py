@@ -59,7 +59,7 @@ class PairwiseComparison(NamedTuple):
     aggregate_stats: Optional[BenchmarkStats]  # Overall stats across benchmarks
 
 
-# Type alias for composite key: either a string (task_key) or tuple (task_key, setup_info)
+# Type alias for composite key: either a string (task_id) or tuple (task_id, setup_info)
 CompositeKey = Union[str, Tuple[str, str]]
 
 
@@ -238,9 +238,11 @@ def _load_run_results(
                         # )
                         # Correct the success field to match the score
                         session_result.success = expected_success
-                    task_key = session_result.task_key
-                    if task_key == "" or task_key is None:
-                        raise ValueError(f"Illegal task key '{task_key}'!\n" f"    File: {session_results_file}\n")
+                    session_task_id = session_result.task_id
+                    if session_task_id == "" or session_task_id is None:
+                        raise ValueError(
+                            f"Illegal task key '{session_task_id}'!\n" f"    File: {session_results_file}\n"
+                        )
 
                     # Determine setup info based on what's being compared
                     setup_info = ""
@@ -249,16 +251,16 @@ def _load_run_results(
                     elif model is None and config_model:
                         setup_info = config_model
 
-                    # Create composite key: (task_key, setup_info) for unique identification
-                    # When setup_info is empty (specific agent/model), just use task_key
-                    composite_key = (task_key, setup_info) if setup_info else task_key
+                    # Create composite key: (task_id, setup_info) for unique identification
+                    # When setup_info is empty (specific agent/model), just use task_id
+                    composite_key = (session_task_id, setup_info) if setup_info else session_task_id
 
                     # Check for duplicate composite keys
                     if composite_key in results_by_task:
                         existing_task_info = results_by_task[composite_key]
                         if existing_task_info.session_result.success != session_result.success:
                             raise ValueError(
-                                f"Duplicate entry found for task '{task_key}' with setup '{setup_info}'!\n"
+                                f"Duplicate entry found for task '{session_task_id}' with setup '{setup_info}'!\n"
                                 f"  First occurrence:\n"
                                 f"    File: {existing_task_info.file_path}\n"
                                 f"    Session ID: {existing_task_info.session_result.session_id}\n"

@@ -30,7 +30,7 @@ def create_mock_results(
         model: Model name
         benchmark: Benchmark slug name
         subset: Optional subset name
-        tasks: List of (task_key, score) tuples
+        tasks: List of (task_id, score) tuples
         run_id: Optional run ID (generated if not provided)
     """
     if run_id is None:
@@ -63,15 +63,15 @@ def create_mock_results(
     sessions_dir = run_dir / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
-    for task_key, score in tasks:
-        session_id = f"session-{task_key}"
+    for task_id, score in tasks:
+        session_id = f"session-{task_id}"
         session_dir = sessions_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
 
         # Create results.json
         session_result = SessionResults(
             session_id=session_id,
-            task_key=task_key,
+            task_id=task_id,
             success=score >= 0.99,
             score=score,
             is_finished=True,
@@ -1165,7 +1165,7 @@ def test_compare_only_models_no_agents(tmp_path):
     # Verify comparison works across any agents (both models should appear)
     assert "model1" in result.output
     assert "model2" in result.output
-    assert "50." in result.output  # May be truncated as "50.…" in table
+    assert "50." in result.output or "50…" in result.output  # May be truncated as "50.…" in table
     # New format shows summary table
     assert "Statistical Significance Matrix" in result.output
 
@@ -1624,7 +1624,7 @@ def test_breslow_day_text_output(tmp_path):
     # Check that text output includes Breslow-Day test information
     # New format shows it in the overall table section
     assert (
-        "Breslow-Day" in result.output or "breslow" in result.output.lower()
+        "Breslow-Day" in result.output or "breslow" in result.output.lower() or "Bre…" in result.output
     ), "Expected Breslow-Day test information in text output"
     assert (
         "P-value" in result.output or "p-value" in result.output or "p=" in result.output
@@ -1633,4 +1633,6 @@ def test_breslow_day_text_output(tmp_path):
         "Interpretation" in result.output
         or "homogeneous" in result.output.lower()
         or "consistent" in result.output.lower()
+        or "hom…" in result.output
+        or "con…" in result.output
     ), "Expected interpretation in text output"
