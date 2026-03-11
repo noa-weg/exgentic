@@ -12,7 +12,7 @@ from .commands.dashboard import dashboard_cmd
 from .commands.evaluate import evaluate_cmd
 from .commands.listing import list_cmd
 from .commands.run_info import preview_cmd, results_cmd, status_cmd
-from .commands.setup_benchmark import setup_cmd
+from .commands.setup import setup_cmd
 from .options import apply_debug_mode
 from .render import print_banner, should_print_banner
 

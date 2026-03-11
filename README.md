@@ -53,15 +53,24 @@ Set up your environment:
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e ".[smolagents]"
+
 ```
 
-### 🔧 Benchmark Setup
+### 🔧 Setup
 
-Run the setup command for each benchmark before first use:
+Run the setup command for benchmarks and agents before first use:
+
+**Benchmarks:**
 ```bash
-exgentic setup appworld
-exgentic setup tau2
+exgentic setup --benchmark appworld
+exgentic setup --benchmark tau2
+```
+
+**Agents:**
+```bash
+exgentic setup --agent smolagents
+exgentic setup --agent openai
+exgentic setup --agent claude
 ```
 ### 🔑 API Credentials
 
@@ -126,17 +135,15 @@ There are two simple example benchmarks:
 ## 🤖 Available Agents
 
 ### ⚡ LiteLLM Tool Calling
-**Setup:** `pip install -e ".[litellm]"`
-
+**Setup:** `exgentic setup --agent litellm_tool_calling` 
 ### 🧠 SmolAgents Tool calling and Code Agents
+**Setup:** `exgentic setup --agent smolagents` "`
 
-**Setup:** `pip install -e ".[smolagents]"`
-
-### 🔷 OpenAI Solo
-**Setup:** `pip install -e ".[openaimacp]"`
+### 🔷 OpenAI MCP
+**Setup:** `exgentic setup --agent openai`  
 
 ### 🎨 Claude Code
-**Setup:** To be added...
+**Setup:** `exgentic setup --agent claude`   
 
 ---
 
