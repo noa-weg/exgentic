@@ -57,6 +57,33 @@ def core_run(
     execute: bool,
     aggregate: bool,
 ) -> RunResults:
+    # Perform OTEL health check and display configuration if enabled
+    import os
+
+    from ...utils.settings import get_settings
+
+    settings = get_settings()
+    if settings.otel_enabled:
+        from ...utils.otel import check_and_warn_otel_health
+
+        # Display OTEL configuration
+        endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "not set")
+        protocol = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+        service_name = os.getenv("OTEL_SERVICE_NAME", "exgentic")
+        record_content = "yes" if settings.otel_record_content else "no"
+
+        print("\n" + "=" * 70)
+        print("📊 OpenTelemetry Tracing ENABLED")
+        print("=" * 70)
+        print(f"  Service Name:     {service_name}")
+        print(f"  Collector:        {endpoint}")
+        print(f"  Protocol:         {protocol}")
+        print(f"  Record Content:   {record_content}")
+        print("=" * 70 + "\n")
+
+        # Perform health check
+        check_and_warn_otel_health()
+
     with run_config.get_context() as ctx:
         if run_config.run_id is None or run_config.cache_dir is None:
             updates = {}
@@ -84,6 +111,15 @@ def core_run(
             run_config = run_config.model_copy(update={"task_ids": status.task_ids})
         tracker.on_run_start(run_config)
         if execute:
+            # Perform OTEL health check once at the start of any run
+            from ...utils.settings import get_settings
+
+            settings = get_settings()
+            if settings.otel_enabled:
+                from ...utils.otel import check_and_warn_otel_health
+
+                check_and_warn_otel_health()
+
             plan = RunPlan.from_config_and_status(run_config, status)
             reused_results = load_reused_results(plan.reuse, log)
             log.info(

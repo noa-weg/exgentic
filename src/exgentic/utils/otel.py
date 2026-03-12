@@ -41,6 +41,22 @@ class UrandomIdGenerator(IdGenerator):
         return int.from_bytes(os.urandom(16), "big")
 
 
+def check_and_warn_otel_health() -> None:
+    """Check OTEL collector health once and display warning if unhealthy."""
+    is_healthy, error_msg = check_otel_collector_health()
+    _otel_is_healthy = is_healthy
+    _otel_health_error = error_msg
+
+    if not is_healthy:
+        import sys
+
+        error_banner = "\n" + "\n" + "⚠️  OPENTELEMETRY TRACING DISABLED ⚠️     " + f"Reason: {error_msg}\n"
+        print(error_banner, file=sys.stderr)
+
+        # Disable OTEL by setting the environment variable
+        os.environ["EXGENTIC_OTEL_ENABLED"] = "false"
+
+
 def init_tracing_from_env(
     service_name: Optional[str] = None,
     use_urandom_ids: bool = True,
@@ -74,6 +90,9 @@ def init_tracing_from_env(
     if type(current_provider).__name__ != "ProxyTracerProvider":
         # Already initialized, just return a tracer
         return trace.get_tracer(__name__)
+    otel_health, _ = check_otel_collector_health()
+    if not otel_health:
+        return trace.get_tracer(__name__)
 
     # Initialize the tracer provider
     resource = Resource.create(
@@ -100,6 +119,96 @@ def init_tracing_from_env(
         provider.add_span_processor(BatchSpanProcessor(exporter))
 
     return trace.get_tracer(__name__)
+
+
+def check_otel_collector_health(timeout: int = 5) -> tuple[bool, Optional[str]]:
+    """Check if the OTEL collector endpoint is reachable and protocol matches.
+
+    Verifies:
+    1. Endpoint is reachable (socket connection)
+    2. Protocol (HTTP/gRPC) matches what the server supports
+
+    Args:
+        timeout: Connection timeout in seconds (default: 5)
+
+    Returns:
+        Tuple of (is_healthy, error_message)
+        - (True, None) if collector is reachable and protocol matches
+        - (False, error_message) if collector is not reachable or protocol mismatch
+    """
+    import socket
+    from urllib.parse import urlparse
+
+    # Get endpoint and protocol from environment
+    protocol = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip().lower()
+
+    # Try traces-specific endpoint first, fall back to general endpoint
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+
+    if not endpoint:
+        return True, None  # No endpoint configured, skip check
+
+    host = "Unknown"
+    port = 0
+    try:
+        parsed = urlparse(endpoint)
+        host = parsed.hostname
+        port = parsed.port
+
+        if not host or not port:
+            return False, f"Invalid endpoint URL: {endpoint}"
+
+        # Step 1: Check if endpoint is reachable via socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((host, port))
+        sock.close()
+
+        if result != 0:
+            return False, f"Cannot connect to OTEL collector at {host}:{port}"
+
+        # Step 2: Verify protocol matches by attempting a minimal request
+        if protocol.startswith("http"):
+            # For HTTP protocol, try a simple HTTP request to verify it's an HTTP server
+            try:
+                import http.client
+
+                # Determine if we should use HTTPS
+                use_https = parsed.scheme == "https"
+                conn_class = http.client.HTTPSConnection if use_https else http.client.HTTPConnection
+
+                conn = conn_class(host, port, timeout=timeout)
+                # Try to access the OTLP traces endpoint
+                conn.request("POST", "/v1/traces", headers={"Content-Type": "application/x-protobuf"})
+                response = conn.getresponse()
+                conn.close()
+
+                # We expect either 200 (OK), 400 (bad request - empty body), or 405 (method not allowed)
+                # What we DON'T want is connection refused or protocol errors
+                if response.status in (200, 400, 405, 415):  # 415 = Unsupported Media Type
+                    return True, None
+                return False, f"HTTP endpoint responded with unexpected status: {response.status}"
+
+            except http.client.HTTPException as e:
+                return False, f"HTTP protocol error: {e!s}. Server {endpoint} may not support HTTP protocol."
+            except Exception as e:
+                # If we can connect via socket but HTTP fails, likely a protocol mismatch
+                return False, f"Protocol mismatch: configured as HTTP but server {endpoint} may be gRPC. Error: {e!s}"
+
+        elif protocol == "grpc":
+            # For gRPC, socket connection is sufficient
+            # Full gRPC health check would require grpc library which may not be available
+            return True, None
+
+        else:
+            return False, f"Unknown protocol: {protocol}. Expected 'http/protobuf' or 'grpc'"
+
+    except socket.gaierror:
+        return False, f"Cannot resolve hostname: {host}"
+    except socket.timeout:
+        return False, f"Connection timeout to {host}:{port}"
+    except Exception as e:
+        return False, f"Error checking OTEL collector: {e!s}"
 
 
 def flush_traces(timeout_millis: int = 30000) -> bool:
