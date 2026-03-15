@@ -41,22 +41,6 @@ class UrandomIdGenerator(IdGenerator):
         return int.from_bytes(os.urandom(16), "big")
 
 
-def check_and_warn_otel_health() -> None:
-    """Check OTEL collector health once and display warning if unhealthy."""
-    is_healthy, error_msg = check_otel_collector_health()
-    _otel_is_healthy = is_healthy
-    _otel_health_error = error_msg
-
-    if not is_healthy:
-        import sys
-
-        error_banner = "\n" + "\n" + "⚠️  OPENTELEMETRY TRACING DISABLED ⚠️     " + f"Reason: {error_msg}\n"
-        print(error_banner, file=sys.stderr)
-
-        # Disable OTEL by setting the environment variable
-        os.environ["EXGENTIC_OTEL_ENABLED"] = "false"
-
-
 def init_tracing_from_env(
     service_name: Optional[str] = None,
     use_urandom_ids: bool = True,
@@ -143,10 +127,10 @@ def check_otel_collector_health(timeout: int = 5) -> tuple[bool, Optional[str]]:
     protocol = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip().lower()
 
     # Try traces-specific endpoint first, fall back to general endpoint
-    endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
     if not endpoint:
-        return True, None  # No endpoint configured, skip check
+        return False, "OTEL_EXPORTER_OTLP_ENDPOINT not specified"
 
     host = "Unknown"
     port = 0

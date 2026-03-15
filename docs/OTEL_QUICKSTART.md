@@ -29,7 +29,7 @@ export EXGENTIC_OTEL_ENABLED=true
 
 # Optional: Enable content recording (includes task descriptions, observations, etc.)
 # Warning: This may include sensitive data in traces
-export OTEL_RECORD_CONTENT="true"
+export EXGENTIC_OTEL_RECORD_CONTENT="true"
 
 
 exgentic evaluate \
@@ -64,39 +64,8 @@ curl "http://localhost:16686/api/traces?service=exgentic&limit=100" | jq '.' > t
 curl "http://localhost:16686/api/traces/TRACE_ID" | jq '.' > trace.json
 ```
 
-## 📊 What You'll See
-
-### Trace Structure
-```
-Session Span (root)
-├── execute_tool: initial_observation
-├── execute_tool: action_1
-├── execute_tool: action_2
-└── execute_tool: action_n
-```
-
-### Key Attributes
-- `gen_ai.conversation.id` - Session identifier
-- `gen_ai.tool.name` - Action/tool name
-- `gen_ai.tool.parameters` - Tool input (if OTEL_RECORD_CONTENT=true)
-- `gen_ai.tool.result` - Tool output (if OTEL_RECORD_CONTENT=true)
-- `exgentic.score.success` - Task success status
-- `exgentic.session.steps` - Number of steps taken
-
-## 🔧 Configuration Options
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OTEL_SERVICE_NAME` | `exgentic` | Service name in Jaeger |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | - | Jaeger endpoint (e.g., http://localhost:4318) |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Protocol: `http/protobuf` or `grpc` |
-| `OTEL_RECORD_CONTENT` | `false` | Include task/observation content in traces |
-| `OTEL_SERVICE_VERSION` | `1.0.0` | Service version |
-| `DEPLOYMENT_ENVIRONMENT` | `dev` | Environment name |
-
-### Ports
+ 
+### Default Jaeger Ports
 
 | Port | Service |
 |------|---------|
@@ -106,19 +75,9 @@ Session Span (root)
 
 ## 🛠️ Troubleshooting
 
-### Health Check Warnings
+### Health Check Exception
 
-If you see a warning like:
-```
-WARNING: OTEL collector health check failed: Cannot connect to OTEL collector at localhost:4318.
-OpenTelemetry tracing will be DISABLED.
-```
-
-This means:
-1. Jaeger/OTEL collector is not running or not accessible
-2. Tracing has been automatically disabled to prevent errors
-3. Your benchmark will run normally, just without trace collection
-
+ 
 **To fix:**
 - Start Jaeger: `podman run -d --name jaeger -e COLLECTOR_OTLP_ENABLED=true -p 16686:16686 -p 4317:4317 -p 4318:4318 jaegertracing/all-in-one:latest`
 - Verify it's running: `podman ps | grep jaeger`
