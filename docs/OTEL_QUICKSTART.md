@@ -4,8 +4,6 @@
 
 ### 1. Start Jaeger
 
-**Important:** Exgentic automatically checks if the OTEL collector is reachable before starting. If the health check fails, tracing will be disabled with a warning message.
-
 ```bash
 # Using Podman (or replace with 'docker' if you have Docker)
 podman run -d --name jaeger \
