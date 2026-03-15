@@ -18,6 +18,8 @@ podman run -d --name jaeger \
 
 ```bash
 
+pip install -e '.[otel]' 
+
 exgentic setup --agent tool_calling 
 
 exgentic setup --benchmark tau2
@@ -108,7 +110,6 @@ podman run -d --name jaeger -e COLLECTOR_OTLP_ENABLED=true -p 16686:16686 -p 431
 
 ## 📚 Additional Documentation
 
-- **Full Export Guide**: See [`OTEL_EXPORT_INSTRUCTIONS.md`](./OTEL_EXPORT_INSTRUCTIONS.md)
 - **Semantic Conventions**: See [`OTEL_SEMANTIC_CONVENTIONS.md`](./OTEL_SEMANTIC_CONVENTIONS.md)
 - **Jaeger Docs**: https://www.jaegertracing.io/docs/
 
