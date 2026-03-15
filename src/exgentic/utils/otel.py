@@ -177,9 +177,55 @@ def check_otel_collector_health(timeout: int = 5) -> tuple[bool, Optional[str]]:
                 return False, f"Protocol mismatch: configured as HTTP but server {endpoint} may be gRPC. Error: {e!s}"
 
         elif protocol == "grpc":
-            # For gRPC, socket connection is sufficient
-            # Full gRPC health check would require grpc library which may not be available
-            return True, None
+            # For gRPC, attempt a basic protocol check
+            # We'll try to send a minimal gRPC frame to verify it's a gRPC server
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout)
+                sock.connect((host, port))
+
+                # Send HTTP/2 connection preface followed by SETTINGS frame
+                # This is what a real gRPC client sends
+                preface = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+                # HTTP/2 SETTINGS frame: length=0, type=4, flags=0, stream_id=0
+                settings_frame = b"\x00\x00\x00\x04\x00\x00\x00\x00\x00"
+                sock.sendall(preface + settings_frame)
+
+                # Try to receive a response
+                # A gRPC/HTTP2 server MUST respond with a SETTINGS frame
+                sock.settimeout(2)  # Short timeout for response
+                response = sock.recv(1024)
+                sock.close()
+
+                # Validate we got a proper HTTP/2 response
+                # HTTP/2 frames start with 3-byte length, 1-byte type, 1-byte flags, 4-byte stream ID
+                if len(response) >= 9:
+                    # Check if we got a SETTINGS frame (type=4) or other valid HTTP/2 frame
+                    frame_type = response[3]
+                    if frame_type in (0x04, 0x00, 0x01):  # SETTINGS, DATA, or HEADERS frame
+                        return True, None
+
+                # If we got a response but it's not HTTP/2, it's likely HTTP/1.1
+                if response:
+                    if response.startswith(b"HTTP/1"):
+                        return (
+                            False,
+                            f"Server at {endpoint} is HTTP/1.1, not gRPC. Use 'http/protobuf' protocol instead.",
+                        )
+                    return (
+                        False,
+                        f"Server at {endpoint} responded but not with valid HTTP/2 frames. May not be a gRPC server.",
+                    )
+
+                return False, f"gRPC endpoint at {endpoint} did not respond to HTTP/2 preface"
+
+            except socket.timeout:
+                return (
+                    False,
+                    f"Timeout waiting for gRPC response from {endpoint}. Server may not support gRPC protocol.",
+                )
+            except Exception as e:
+                return False, f"gRPC protocol check failed: {e!s}. Server {endpoint} may not support gRPC protocol."
 
         else:
             return False, f"Unknown protocol: {protocol}. Expected 'http/protobuf' or 'grpc'"
