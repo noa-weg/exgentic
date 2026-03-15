@@ -74,9 +74,6 @@ def init_tracing_from_env(
     if type(current_provider).__name__ != "ProxyTracerProvider":
         # Already initialized, just return a tracer
         return trace.get_tracer(__name__)
-    otel_health, _ = check_otel_collector_health()
-    if not otel_health:
-        return trace.get_tracer(__name__)
 
     # Initialize the tracer provider
     resource = Resource.create(
