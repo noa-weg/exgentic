@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from ...interfaces.registry import load_benchmark
 from ...observers.logging import get_logger
+from ...utils.otel import check_otel_collector_health
 from ...utils.paths import get_run_paths
+from ...utils.settings import get_settings
 from ..types import (
     RunConfig,
     RunPlan,
@@ -58,9 +60,6 @@ def core_run(
     aggregate: bool,
 ) -> RunResults:
     # Perform OTEL health check if enabled
-    from ...utils.otel import check_otel_collector_health
-    from ...utils.settings import get_settings
-
     settings = get_settings()
     if settings.otel_enabled:
         is_healthy, error_msg = check_otel_collector_health()
