@@ -269,7 +269,7 @@ class ResultsObserver(Observer):
         sess_paths = self.paths.session(session_id)
         sess_paths.results.parent.mkdir(parents=True, exist_ok=True)
         with open(sess_paths.results, "w", encoding="utf-8") as f:
-            json.dump(tr.model_dump(), f, ensure_ascii=False, indent=2)
+            json.dump(tr.model_dump(), f, ensure_ascii=False, indent=2, default=str)
         error_message = score.session_metadata.get("error")
         if error_message:
             error_source = score.session_metadata.get("error_source")
@@ -474,7 +474,7 @@ class ResultsObserver(Observer):
         try:
             rp.results.parent.mkdir(parents=True, exist_ok=True)
             with open(rp.results, "w", encoding="utf-8") as f:
-                json.dump(results_obj.model_dump(), f, ensure_ascii=False, indent=2)
+                json.dump(results_obj.model_dump(), f, ensure_ascii=False, indent=2, default=str)
             if bench_results_obj is not None:
                 rp.benchmark_results.parent.mkdir(parents=True, exist_ok=True)
                 with open(rp.benchmark_results, "w", encoding="utf-8") as f:
@@ -483,6 +483,7 @@ class ResultsObserver(Observer):
                         f,
                         ensure_ascii=False,
                         indent=2,
+                        default=str,
                     )
         except OSError:
             # Allow aggregation in read-only output directories.
