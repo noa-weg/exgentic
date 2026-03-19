@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from ... import __version__ as exgentic_version
 from ...core.orchestrator.observer import Observer
 from ...core.orchestrator.termination import (
     AgentError,
@@ -469,6 +470,7 @@ class ResultsObserver(Observer):
             skipped_session_ids=skipped_session_ids,
             skipped_session_reasons=skipped_session_reasons,
             missing_result_files=missing_result_files,
+            exgentic_version=exgentic_version,
         )
 
         try:
