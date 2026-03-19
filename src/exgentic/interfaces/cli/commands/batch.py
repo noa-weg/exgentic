@@ -964,12 +964,11 @@ def batch_publish_cmd(
 ) -> None:
     """Publish run results to a HuggingFace dataset."""
     try:
-        from datasets import Dataset, DatasetDict, load_dataset
-    except ImportError:
+        from datasets import Dataset, load_dataset
+    except ImportError as err:
         raise click.ClickException(
-            "The 'datasets' package is required for publishing. "
-            "Install it with: pip install datasets"
-        )
+            "The 'datasets' package is required for publishing. Install it with: pip install datasets"
+        ) from err
 
     config_paths = _expand_config_inputs(config_values, list(ctx.args))
     rows, failures = _collect_results_rows(config_paths)
@@ -996,17 +995,13 @@ def batch_publish_cmd(
                 if key in existing_keys:
                     # Replace existing row with updated one
                     existing_rows = [
-                        r for r in existing_rows
-                        if (r.get("benchmark"), r.get("agent"), r.get("model")) != key
+                        r for r in existing_rows if (r.get("benchmark"), r.get("agent"), r.get("model")) != key
                     ]
                     updated += 1
                 new_rows.append(row)
 
             all_rows = existing_rows + new_rows
-            click.echo(
-                f"Publishing {len(all_rows)} row(s) "
-                f"({len(new_rows) - updated} new, {updated} updated)."
-            )
+            click.echo(f"Publishing {len(all_rows)} row(s) " f"({len(new_rows) - updated} new, {updated} updated).")
         except Exception:
             click.echo("No existing dataset found, creating new one.")
             all_rows = rows
