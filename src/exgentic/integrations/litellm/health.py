@@ -46,5 +46,6 @@ def check_model_accessible_sync(
         run_sync(acheck_model_accessible(model), timeout=timeout)
         logger.info("Model health check passed for %s", model)
     except Exception as exc:
-        logger.error("Model health check failed for %s: %s", model, exc)
-        raise RuntimeError(f"Model {model} is not accessible: {exc}") from exc
+        error_msg = getattr(exc, "message", "") or str(exc) or repr(exc)
+        logger.error("Model health check failed for %s: %s", model, error_msg)
+        raise RuntimeError(f"Model {model} is not accessible: {error_msg}") from exc
