@@ -80,7 +80,8 @@ def prepare_subprocess_env() -> dict[str, str]:
     """
     import os
 
-    project_root = str(find_project_root())
+    root = find_project_root()
+    project_root = str(root) if (root / "pyproject.toml").exists() else ""
 
     env: dict[str, str] = {
         k: v

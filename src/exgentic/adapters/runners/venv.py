@@ -126,7 +126,8 @@ class VenvRunner:
         )
 
         root = find_project_root()
-        _uv("pip", "install", "--python", str(python), "--no-cache", str(root), capture_output=True, text=True)
+        install_target = str(root) if (root / "pyproject.toml").exists() else "exgentic"
+        _uv("pip", "install", "--python", str(python), "--no-cache", install_target, capture_output=True, text=True)
 
         return venv
 
