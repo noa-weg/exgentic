@@ -44,6 +44,24 @@ analysis = [
     "statsmodels>=0.14,<1",
 ]
 
+cli = [
+    "litellm[proxy]"
+]
+
+cuga = [
+    "cuga>=0.2.10",
+]
+
+dev = [
+    "langchain-core>=0.3",
+    "pytest>=7.0.0",
+    "pytest-asyncio",
+    "pytest-mock",
+    "pre-commit",
+    "ruff",
+    "codespell",
+    "detect-secrets",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true

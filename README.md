@@ -121,6 +121,9 @@ exgentic list benchmarks
 | **Codex CLI** | OpenAI Codex CLI agent |
 | **Gemini CLI** | Google Gemini CLI agent |
 
+### 🧩 CUGA SDK
+**Setup:** `exgentic setup --agent cuga_sdk` (requires optional dependency group `.[cuga]`)
+
 ---
 
 ## Dashboard

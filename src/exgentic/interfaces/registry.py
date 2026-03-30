@@ -182,6 +182,13 @@ AGENTS: dict[str, RegistryEntry] = {
         attr="GeminiAgent",
         kind="agent",
     ),
+    "cuga_sdk": RegistryEntry(
+        slug_name="cuga_sdk",
+        display_name="CUGA SDK",
+        module="exgentic.agents.cuga_sdk.cuga_sdk_agent",
+        attr="CUGASDKAgent",
+        kind="agent",
+    ),
 }
 
 
