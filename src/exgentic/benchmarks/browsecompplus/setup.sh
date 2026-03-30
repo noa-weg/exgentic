@@ -17,8 +17,7 @@ else
   echo "[WARNING] Java not found. BM25 searcher will not be available."
 fi
 
-BENCH_ROOT="${EXGENTIC_CACHE_DIR:-.exgentic}/browsecompplus"
-mkdir -p "$BENCH_ROOT"
+BENCH_ROOT="."
 
 ###############################################################################
 # 2. Detect GPU availability

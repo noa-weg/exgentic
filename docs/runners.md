@@ -48,7 +48,7 @@ evaluate(
 )
 ```
 
-The default runner is `direct`. For production evaluations, `venv` is recommended.
+The default runner is `venv`. For production evaluations, `venv` is recommended.
 
 ---
 
@@ -95,7 +95,7 @@ When a venv runner starts, it:
 To trigger a fresh install (e.g. after updating `requirements.txt`):
 
 ```bash
-exgentic setup --benchmark tau2 --runner venv --force
+exgentic install --benchmark tau2 --force
 ```
 
 ### Configuration

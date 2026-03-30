@@ -59,15 +59,16 @@ exgentic list tasks --benchmark tau2 --subset retail --limit 20
 
 ---
 
-## Setup
+## install
 
-Install a benchmark's or agent's dependencies into the default runner environment.
+Install a benchmark's or agent's dependencies (default: isolated venv).
 
 ```bash
-exgentic setup --benchmark tau2
-exgentic setup --agent tool_calling
-exgentic setup --benchmark tau2 --force         # reinstall even if already set up
-exgentic setup --benchmark tau2 --runner venv   # install into an isolated venv
+exgentic install --benchmark tau2              # install deps + data (default: venv)
+exgentic install --agent tool_calling
+exgentic install --benchmark tau2 --force       # reinstall even if already set up
+exgentic install --benchmark tau2 --docker      # build Docker image
+exgentic install --benchmark tau2 --local       # install into local environment
 ```
 
 | Flag | Description |
@@ -75,9 +76,32 @@ exgentic setup --benchmark tau2 --runner venv   # install into an isolated venv
 | `--benchmark` | Benchmark slug |
 | `--agent` | Agent slug |
 | `--force` | Force reinstall |
-| `--runner` | Runner type: `direct`, `venv`, `docker` |
+| `--docker` | Build a Docker image |
+| `--local` | Install into the local environment instead of an isolated venv |
 
 See [Runners](./runners.md) for details on runner types.
+
+---
+
+## uninstall
+
+Remove an installed benchmark's or agent's environment.
+
+```bash
+exgentic uninstall --benchmark tau2
+exgentic uninstall --agent tool_calling
+```
+
+| Flag | Description |
+|------|-------------|
+| `--benchmark` | Benchmark slug |
+| `--agent` | Agent slug |
+
+---
+
+## setup (deprecated)
+
+> **Deprecated:** `exgentic setup` is an alias for `exgentic install` and will be removed in a future release. Use `install`/`uninstall` instead.
 
 ---
 
@@ -252,13 +276,13 @@ Exgentic reads the following environment variables.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EXGENTIC_LOG_LEVEL` | `WARNING` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `EXGENTIC_LOG_LEVEL` | `INFO` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
 | `EXGENTIC_CACHE_DIR` | `.exgentic` | Cache directory for venvs and setup state |
 | `EXGENTIC_DOTENV_PATH` | `.env` | Path to `.env` file loaded automatically |
 | `EXGENTIC_OTEL_ENABLED` | `false` | Enable OpenTelemetry tracing |
 | `EXGENTIC_OTEL_RECORD_CONTENT` | `false` | Include prompts/responses in traces (opt-in) |
 | `EXGENTIC_LITELLM_CACHING` | `true` | Enable LiteLLM response caching |
-| `EXGENTIC_LITELLM_CACHE_DIR` | `.litellm_cache` | LiteLLM cache directory |
+| `EXGENTIC_LITELLM_CACHE_DIR` | `~/.cache/exgentic/litellm` | LiteLLM cache directory |
 | `EXGENTIC_LITELLM_LOG_LEVEL` | `WARNING` | LiteLLM internal log level |
 
 ### LLM provider credentials

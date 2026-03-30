@@ -29,8 +29,9 @@ from ...core.types import (
     SingleAction,
     SingleObservation,
 )
+from ...environment.instance import get_manager
 from ...utils.cost import CostReport, LiteLLMCostReport
-from ...utils.settings import RunnerName, get_settings
+from ...utils.settings import RunnerName
 from .retriever import RetrieverClient, get_retriever_url, get_shared_retriever
 
 if TYPE_CHECKING:
@@ -420,14 +421,14 @@ class BrowseCompPlusEvaluator(Evaluator):
 
     @property
     def assets_dir(self):
-        return Path(get_settings().cache_dir).expanduser() / "browsecompplus"
+        return get_manager().env_path("benchmarks/browsecompplus")
 
     def extract_dataset(self):
         import pandas as pd
 
         data_path = self.assets_dir / "data" / "browsecomp_plus_decrypted_docids.jsonl"
         if not data_path.exists():
-            raise Exception(f"{data_path} does not exist. Run 'exgentic setup --benchmark browsecompplus' first.")
+            raise Exception(f"{data_path} does not exist. Run 'exgentic install --benchmark browsecompplus' first.")
         instances = pd.read_json(path_or_buf=data_path, lines=True).to_dict(orient="records")
 
         def proces_instance(instance):
@@ -591,7 +592,7 @@ class BrowseCompPlusBenchmark(Benchmark, BaseModel):
 
     subset: Literal["main"] = "main"
 
-    runner: RunnerName | None = "direct"  # Code is threadsafe
+    runner: RunnerName | None = None  # Threadsafe; uses global default runner (venv)
 
     # Retriever runner — when set, the search index runs as a shared service
     # instead of being loaded in each session process. Useful when sessions
@@ -613,10 +614,10 @@ class BrowseCompPlusBenchmark(Benchmark, BaseModel):
 
     @property
     def _assets_dir(self) -> str:
-        return str(Path(get_settings().cache_dir).expanduser() / "browsecompplus")
+        return str(get_manager().env_path("benchmarks/browsecompplus"))
 
     def _retriever_runner_kwargs(self) -> dict[str, Any]:
-        """Runner kwargs for the retriever container (setup script + volumes).
+        """Runner kwargs for the retriever container (volumes).
 
         Only returns Docker-specific kwargs when the retriever actually runs
         in Docker; for 'service' or 'direct' these would leak into the
@@ -624,9 +625,10 @@ class BrowseCompPlusBenchmark(Benchmark, BaseModel):
         """
         if self.retriever_runner != "docker":
             return {}
-        kw: dict[str, Any] = {}
-        if self.setup_script:
-            kw["setup_script"] = self.setup_script
+        kw: dict[str, Any] = {
+            "env_name": f"benchmarks/{self.slug_name}",
+            "module_path": type(self).__module__,
+        }
         kw["volumes"] = {self._assets_dir: self._assets_dir}
         return kw
 
@@ -659,6 +661,7 @@ class BrowseCompPlusBenchmark(Benchmark, BaseModel):
 
     def runner_kwargs(self) -> dict[str, Any]:
         kw = super().runner_kwargs()
+        kw["health_timeout"] = 120.0
         if self.resolve_runner() == "docker":
             # Mount host assets (indexes, data) into the container so they
             # are not re-downloaded for every image build.
