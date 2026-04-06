@@ -6,7 +6,7 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 
 from opentelemetry import context, trace
 from opentelemetry.sdk.trace import Span
@@ -18,6 +18,7 @@ from ...core.context import OtelContext, get_context, set_context
 from ...core.orchestrator.observer import Observer
 from ...interfaces.registry import get_agent_entries, get_benchmark_entries
 from ...utils.otel import (
+    PerSessionFileExporter,
     flush_traces,
     get_session_logger,
     init_tracing_from_env,
@@ -35,7 +36,7 @@ class SessionSpanManager:
         self.session_id = session_id
         self._tracer = tracer
         self._span_stack: list[Span] = []
-        self._heritable_attributes: Dict[str, AttributeValue] = {}
+        self._heritable_attributes: dict[str, AttributeValue] = {}
 
         # Initialize session logger
         self._logger = get_session_logger(
@@ -99,10 +100,10 @@ class SessionSpanManager:
         )
 
     @property
-    def current_span(self) -> Optional[Span]:
+    def current_span(self) -> Span | None:
         return self._span_stack[-1] if self._span_stack else None
 
-    def get_otel_context(self) -> Optional[OtelContext]:
+    def get_otel_context(self) -> OtelContext | None:
         """Export current span context for subprocess transport.
 
         Returns:
@@ -136,7 +137,7 @@ class SessionSpanManager:
         span_ctx = self.current_span.get_span_context()
         self._logger.log_attribute_set(key, value, format(span_ctx.span_id, "016x"))
 
-    def set_attributes(self, attributes: Optional[Dict[str, AttributeValue]] = None, **kwargs) -> None:
+    def set_attributes(self, attributes: dict[str, AttributeValue] | None = None, **kwargs) -> None:
         if attributes is None:
             attributes = {}
         attributes.update(kwargs)
@@ -148,7 +149,7 @@ class SessionSpanManager:
         if self.current_span:
             self.set_attribute(key, value)
 
-    def set_heritable_attributes(self, attributes: Optional[Dict[str, AttributeValue]] = None, **kwargs) -> None:
+    def set_heritable_attributes(self, attributes: dict[str, AttributeValue] | None = None, **kwargs) -> None:
         if attributes:
             self._heritable_attributes.update(attributes)
         self._heritable_attributes.update(kwargs)
@@ -185,16 +186,16 @@ class OtelTracingObserver(Observer):
 
     def __init__(self):
         super().__init__()
-        self._run_attributes: Dict[str, AttributeValue] = {}
-        self._span_managers: Dict[str, SessionSpanManager] = {}
-        self._session_step_counters: Dict[str, int] = {}
-        self._session_agents: Dict[str, Any] = {}  # Store agent instances by session_id
-        self._session_actions: Dict[str, list] = {}  # Store session actions for tool definitions
+        self._run_attributes: dict[str, AttributeValue] = {}
+        self._span_managers: dict[str, SessionSpanManager] = {}
+        self._session_step_counters: dict[str, int] = {}
+        self._session_agents: dict[str, Any] = {}  # Store agent instances by session_id
+        self._session_actions: dict[str, list] = {}  # Store session actions for tool definitions
 
     def _get_span_manager(self, session_id: str) -> SessionSpanManager:
         return self._span_managers[session_id]
 
-    def _get_action_description(self, session, action_name: str) -> Optional[str]:
+    def _get_action_description(self, session, action_name: str) -> str | None:
         """Look up action description from session.actions by name."""
         for action_type in session.actions:
             if action_type.name == action_name:
@@ -243,9 +244,17 @@ class OtelTracingObserver(Observer):
 
         from ...utils.paths import get_run_paths
 
+        # Write per-session otel_spans.jsonl files automatically.
+        run_root = get_run_paths().root
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "add_span_processor"):
+            from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+            provider.add_span_processor(SimpleSpanProcessor(PerSessionFileExporter(run_root)))
+
         self._run_attributes = {
             "exgentic.benchmark.slug_name": bench_entry.slug_name if bench_entry is not None else run_config.benchmark,
-            "exgentic.benchmark.subset": run_config.subset,
+            "exgentic.benchmark.subset": run_config.subset or "",
             "exgentic.benchmark.agent.name": agent_entry.slug_name if agent_entry is not None else run_config.agent,
             "exgentic.agent.slug": run_config.agent,
             "exgentic.run.id": get_run_paths().run_id,
@@ -255,11 +264,16 @@ class OtelTracingObserver(Observer):
         if model_name:
             self._run_attributes["gen_ai.request.model"] = model_name
 
-    def on_session_creation(self, session) -> None:
-        span_manager = SessionSpanManager(session.session_id, self.paths.session(session.session_id).root)
-        self._span_managers[session.session_id] = span_manager
-        self._session_step_counters[session.session_id] = 0
-        self._session_actions[session.session_id] = session.actions  # Store actions for tool definitions
+    def on_session_enter(self, session_id: str, task_id: str | None) -> None:
+        """Start the root session span + publish OTEL context.
+
+        This fires before benchmark/agent services are spawned, so the
+        trace_id and span_id land in their per-service runtime.json
+        files and their LLM calls can attach to the session trace.
+        """
+        span_manager = SessionSpanManager(session_id, self.paths.session(session_id).root)
+        self._span_managers[session_id] = span_manager
+        self._session_step_counters[session_id] = 0
 
         # Start root session span
         bench_name = self._run_attributes.get("exgentic.benchmark.slug_name", "unknown_benchmark")
@@ -269,18 +283,33 @@ class OtelTracingObserver(Observer):
 
         span_manager.set_heritable_attributes(self._run_attributes)
 
-        # Set session-level attributes
         # gen_ai.conversation.id is the primary correlation attribute (heritable)
-        span_manager.set_heritable_attribute(
-            "gen_ai.conversation.id",
-            session.session_id,
-        )
+        span_manager.set_heritable_attribute("gen_ai.conversation.id", session_id)
         # Also keep exgentic.session.id for backwards compatibility
-        span_manager.set_heritable_attribute(
-            "exgentic.session.id",
-            session.session_id,
-        )
-        span_manager.set_attribute("exgentic.session.task_id", session.task_id)
+        span_manager.set_heritable_attribute("exgentic.session.id", session_id)
+        if task_id is not None:
+            span_manager.set_attribute("exgentic.session.task_id", task_id)
+
+    def on_session_creation(self, session) -> None:
+        """Add session-dependent attributes to the already-started span."""
+        span_manager = self._span_managers.get(session.session_id)
+        if span_manager is None:
+            # on_session_enter wasn't called first — start the span now
+            # for backward compatibility (tests and observers that only
+            # hook on_session_creation).  Note: child services spawned
+            # before this point will NOT have the OTEL trace_id in their
+            # runtime.json since the span didn't exist yet.
+            import warnings
+
+            warnings.warn(
+                f"on_session_enter was not called before on_session_creation "
+                f"for session {session.session_id}. OTEL trace propagation "
+                f"to child services may be incomplete.",
+                stacklevel=2,
+            )
+            self.on_session_enter(session.session_id, session.task_id)
+            span_manager = self._span_managers[session.session_id]
+        self._session_actions[session.session_id] = session.actions  # Store actions for tool definitions
 
         # Only record task content if otel_record_content is enabled
         if get_settings().otel_record_content:
@@ -408,6 +437,7 @@ class OtelTracingObserver(Observer):
 
         # Flush traces to ensure they are exported
         flush_traces()
+        self._sort_session_spans(session.session_id)
 
         # Clean up
         del self._span_managers[session.session_id]
@@ -438,6 +468,7 @@ class OtelTracingObserver(Observer):
 
         # Flush traces to ensure they are exported
         flush_traces()
+        self._sort_session_spans(session.session_id)
 
         # Clean up
         del self._span_managers[session.session_id]
@@ -446,6 +477,21 @@ class OtelTracingObserver(Observer):
             del self._session_agents[session.session_id]
         if session.session_id in self._session_actions:
             del self._session_actions[session.session_id]
+
+    def _sort_session_spans(self, session_id: str) -> None:
+        """Sort otel_spans.jsonl by start_time so output matches Jaeger ordering."""
+        path = self.paths.session(session_id).root / "otel_spans.jsonl"
+        if not path.exists():
+            return
+        try:
+            with open(path) as f:
+                spans = [json.loads(line) for line in f if line.strip()]
+            spans.sort(key=lambda s: s.get("start_time", ""))
+            with open(path, "w") as f:
+                for span in spans:
+                    f.write(json.dumps(span, separators=(",", ":")) + "\n")
+        except Exception:
+            pass  # Non-critical — unsorted file is still valid
 
 
 # Made with Bob
