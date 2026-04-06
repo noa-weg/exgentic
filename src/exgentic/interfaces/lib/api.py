@@ -120,8 +120,8 @@ def _normalize_run_config(
     run_id: str | None,
     model: str | None,
     max_workers: int | None,
-    max_steps: int,
-    max_actions: int,
+    max_steps: int | None,
+    max_actions: int | None,
     overwrite_sessions: bool,
     benchmark_kwargs: dict[str, Any] | None,
     agent_kwargs: dict[str, Any] | None,
@@ -135,23 +135,27 @@ def _normalize_run_config(
                     agent,
                     subset,
                     task_ids,
-                    num_tasks,
                     cache_dir,
                     run_id,
                     model,
-                    max_workers,
                     benchmark_kwargs,
                     agent_kwargs,
                 )
             )
             or overwrite_sessions
             or output_dir != "./outputs"
-            or max_steps != 100
-            or max_actions != 100
         ):
             raise ValueError("Do not pass run parameters together with config.")
         if isinstance(config, SessionConfig):
-            return _run_config_from_session(config)
+            config = _run_config_from_session(config)
+        if num_tasks is not None:
+            config.num_tasks = num_tasks
+        if max_workers is not None:
+            config.max_workers = max_workers
+        if max_steps is not None:
+            config.max_steps = max_steps
+        if max_actions is not None:
+            config.max_actions = max_actions
         return config
     if benchmark is None or agent is None:
         raise ValueError("benchmark and agent are required.")
@@ -190,8 +194,8 @@ def _normalize_run_config(
         run_id=run_id,
         model=model,
         max_workers=max_workers,
-        max_steps=max_steps,
-        max_actions=max_actions,
+        **({"max_steps": max_steps} if max_steps is not None else {}),
+        **({"max_actions": max_actions} if max_actions is not None else {}),
         overwrite_sessions=overwrite_sessions,
         benchmark_kwargs=bench_kwargs,
         agent_kwargs=agent_cfg,
@@ -211,8 +215,8 @@ def evaluate(
     run_id: str | None = None,
     model: str | None = None,
     max_workers: int | None = None,
-    max_steps: int = 100,
-    max_actions: int = 100,
+    max_steps: int | None = None,
+    max_actions: int | None = None,
     overwrite_sessions: bool = False,
     benchmark_kwargs: dict[str, Any] | None = None,
     agent_kwargs: dict[str, Any] | None = None,
@@ -263,8 +267,8 @@ def evaluate(
         run_id=run_id,
         model=model,
         max_workers=max_workers,
-        max_steps=max_steps,
-        max_actions=max_actions,
+        **({"max_steps": max_steps} if max_steps is not None else {}),
+        **({"max_actions": max_actions} if max_actions is not None else {}),
         overwrite_sessions=overwrite_sessions,
         benchmark_kwargs=benchmark_kwargs,
         agent_kwargs=agent_kwargs,
@@ -289,8 +293,8 @@ def execute(
     run_id: str | None = None,
     model: str | None = None,
     max_workers: int | None = None,
-    max_steps: int = 100,
-    max_actions: int = 100,
+    max_steps: int | None = None,
+    max_actions: int | None = None,
     overwrite_sessions: bool = False,
     benchmark_kwargs: dict[str, Any] | None = None,
     agent_kwargs: dict[str, Any] | None = None,
@@ -341,8 +345,8 @@ def execute(
         run_id=run_id,
         model=model,
         max_workers=max_workers,
-        max_steps=max_steps,
-        max_actions=max_actions,
+        **({"max_steps": max_steps} if max_steps is not None else {}),
+        **({"max_actions": max_actions} if max_actions is not None else {}),
         overwrite_sessions=overwrite_sessions,
         benchmark_kwargs=benchmark_kwargs,
         agent_kwargs=agent_kwargs,
@@ -367,8 +371,8 @@ def aggregate(
     run_id: str | None = None,
     model: str | None = None,
     max_workers: int | None = None,
-    max_steps: int = 100,
-    max_actions: int = 100,
+    max_steps: int | None = None,
+    max_actions: int | None = None,
     overwrite_sessions: bool = False,
     benchmark_kwargs: dict[str, Any] | None = None,
     agent_kwargs: dict[str, Any] | None = None,
@@ -419,8 +423,8 @@ def aggregate(
         run_id=run_id,
         model=model,
         max_workers=max_workers,
-        max_steps=max_steps,
-        max_actions=max_actions,
+        **({"max_steps": max_steps} if max_steps is not None else {}),
+        **({"max_actions": max_actions} if max_actions is not None else {}),
         overwrite_sessions=overwrite_sessions,
         benchmark_kwargs=benchmark_kwargs,
         agent_kwargs=agent_kwargs,
@@ -445,8 +449,8 @@ def status(
     run_id: str | None = None,
     model: str | None = None,
     max_workers: int | None = None,
-    max_steps: int = 100,
-    max_actions: int = 100,
+    max_steps: int | None = None,
+    max_actions: int | None = None,
     overwrite_sessions: bool = False,
     benchmark_kwargs: dict[str, Any] | None = None,
     agent_kwargs: dict[str, Any] | None = None,
@@ -463,8 +467,8 @@ def status(
         run_id=run_id,
         model=model,
         max_workers=max_workers,
-        max_steps=max_steps,
-        max_actions=max_actions,
+        **({"max_steps": max_steps} if max_steps is not None else {}),
+        **({"max_actions": max_actions} if max_actions is not None else {}),
         overwrite_sessions=overwrite_sessions,
         benchmark_kwargs=benchmark_kwargs,
         agent_kwargs=agent_kwargs,
