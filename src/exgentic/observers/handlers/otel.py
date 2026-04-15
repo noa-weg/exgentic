@@ -337,6 +337,14 @@ class OtelTracingObserver(Observer):
                 "exgentic.session.task_id": session.task_id,
             }
         )
+        for prefix, data in (
+            ("exgentic.score.metrics", score.session_metrics),
+            ("exgentic.score.metadata", score.session_metadata),
+        ):
+            for key, value in data.items():
+                otel_value = to_otel_attribute_value(value)
+                if otel_value is not None:
+                    span_manager.set_attribute(f"{prefix}.{key}", otel_value)
 
         self._set_cost_attr(span_manager, "exgentic.agent.agent_cost", lambda: agent.get_cost())
         self._set_cost_attr(span_manager, "exgentic.session.cost", lambda: session.get_cost())
