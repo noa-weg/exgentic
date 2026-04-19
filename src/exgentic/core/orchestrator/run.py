@@ -7,6 +7,7 @@ import logging
 
 from ...interfaces.registry import load_benchmark
 from ...observers.logging import get_logger
+from ...utils.container_reaper import install_cleanup_handlers, reap_orphaned_containers
 from ...utils.paths import get_run_paths
 from ..types import (
     RunConfig,
@@ -62,6 +63,13 @@ def core_run(
     execute: bool,
     aggregate: bool,
 ) -> RunResults:
+    if execute:
+        try:
+            reap_orphaned_containers(logger=_log)
+        except Exception:
+            _log.debug("Orphan container reap skipped", exc_info=True)
+        install_cleanup_handlers(logger=_log)
+
     with run_config.get_context() as ctx:
         if run_config.run_id is None or run_config.cache_dir is None:
             updates = {}
@@ -247,6 +255,12 @@ def core_batch_evaluate(
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from contextvars import copy_context
+
+    try:
+        reap_orphaned_containers(logger=_log)
+    except Exception:
+        _log.debug("Orphan container reap skipped", exc_info=True)
+    install_cleanup_handlers(logger=_log)
 
     # Phase 1: plan.
     configs: list[RunConfig] = []

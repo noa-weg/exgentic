@@ -373,6 +373,7 @@ class SWEBenchSession(Session):
     def _setup_environment(self) -> None:
         """Initialize the Docker environment for the task."""
         self.logger.info("ENV | Setting up environment")
+        from ...utils.container_reaper import docker_run_label_args
         from ...utils.logging import capture_stdio_to_session
 
         with capture_stdio_to_session(self.logger):
@@ -384,6 +385,10 @@ class SWEBenchSession(Session):
             config = yaml.safe_load(config_path.read_text()).copy()
             config["environment"]["cwd"] = self.container_repo_dir
             config["environment"]["pull_timeout"] = self._environment_pull_timeout
+            env_cfg = config.setdefault("environment", {})
+            run_args = list(env_cfg.get("run_args") or ["--rm"])
+            run_args.extend(docker_run_label_args())
+            env_cfg["run_args"] = run_args
 
             self.env = get_sb_environment(config=config, instance=self._instance)
 
