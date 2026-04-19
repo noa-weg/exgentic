@@ -219,9 +219,29 @@ def _plan_config(run_config: RunConfig) -> tuple[RunConfig, Tracker, list[Sessio
         if updates:
             run_config = run_config.model_copy(update=updates)
 
-        # Quiet tracker — no console output during batch planning.
+        # Skip ConsoleLoggerObserver — one panel per config during planning is noisy.
+        from ...observers.handlers.configs import ConfigsObserver
+        from ...observers.handlers.file_logger import FileLoggerObserver
+        from ...observers.handlers.recap import RunRecapObserver
+        from ...observers.handlers.results import ResultsObserver
+        from ...observers.handlers.warnings import WarningsObserver
+        from ...utils.settings import get_settings as _get_settings
+
+        batch_observers: list[Observer] = [
+            ResultsObserver(),
+            ConfigsObserver(),
+            WarningsObserver(),
+            FileLoggerObserver(),
+            RunRecapObserver(console=False),
+        ]
+        if _get_settings().otel_enabled:
+            from ...observers.handlers.otel import OtelTracingObserver
+
+            batch_observers.append(OtelTracingObserver())
+
         tracker = Tracker(
             use_defaults=False,
+            observers=batch_observers,
             max_steps=run_config.max_steps,
             max_actions=run_config.max_actions,
         )
