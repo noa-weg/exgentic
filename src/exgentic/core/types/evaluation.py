@@ -14,7 +14,6 @@ from ...interfaces.registry import (
     load_agent,
     load_benchmark,
 )
-from ..context import try_get_context
 from .model_settings import ModelSettings
 
 
@@ -113,8 +112,9 @@ class BaseEvaluationConfig(BaseModel):
         payload["benchmark_kwargs"] = benchmark_kwargs
         payload["agent_kwargs"] = agent_kwargs
         if payload.get("run_id") is None and benchmark and agent:
-            ctx = try_get_context()
-            payload["run_id"] = (ctx.run_id if ctx else None) or _compute_run_id(
+            # run_id is a deterministic function of benchmark + agent + kwargs;
+            # never fall back to the ambient context (leaks across configs).
+            payload["run_id"] = _compute_run_id(
                 benchmark=str(benchmark),
                 agent=str(agent),
                 benchmark_kwargs=benchmark_kwargs,
