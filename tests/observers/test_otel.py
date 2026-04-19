@@ -2115,6 +2115,36 @@ class TestSessionSpanSemanticConventions:
         assert session_span.attributes["exgentic.session.action.test_action.is_message"] is False
         assert session_span.attributes["exgentic.session.action.test_action.is_finish"] is False
 
+    def test_session_span_tools_list_comprehensive(self, ctx, tmp_path):
+        """Session span emits a comprehensive JSON tools list from Session.actions."""
+
+        class ActA:
+            name = "search"
+            description = "Search the knowledge source"
+            is_message = False
+            is_finish = False
+
+        class ActB:
+            name = "submit"
+            description = "Submit final answer"
+            is_message = False
+            is_finish = True
+
+        class SessionWithActions(MockSession):
+            actions: ClassVar = [ActA(), ActB()]
+
+        session_span, _, _ = _full_lifecycle_spans(ctx, tmp_path, session=SessionWithActions())
+        tools = json.loads(session_span.attributes["exgentic.session.tools"])
+        assert isinstance(tools, list)
+        assert [t["name"] for t in tools] == ["search", "submit"]
+        expected = {
+            "search": {"description": "Search the knowledge source", "is_message": False, "is_finish": False},
+            "submit": {"description": "Submit final answer", "is_message": False, "is_finish": True},
+        }
+        for tool in tools:
+            for field, value in expected[tool["name"]].items():
+                assert tool[field] == value
+
     def test_session_span_context_attributes(self, ctx, tmp_path):
         """exgentic.context.{key} emitted for each context key."""
         session_span, _, _ = _full_lifecycle_spans(ctx, tmp_path)

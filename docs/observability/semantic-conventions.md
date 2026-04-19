@@ -20,6 +20,23 @@ Session Span (ROOT)
 
 ---
 
+## Tool observability lifecycle
+
+An agent's tool usage is observable at four distinct stages, each emitted on a different span:
+
+| Stage | Span | Attribute | Source |
+|-------|------|-----------|--------|
+| 1. Configured capability | Session (ROOT) | `exgentic.session.tools` | `Session.actions` (framework-level) |
+| 2. Offered to LLM | LLM inference | `gen_ai.tool.definitions` | `LitellmKwargs.tools` (per-call) |
+| 3. Chosen by LLM | LLM inference | `gen_ai.output.messages[].tool_calls` | provider response |
+| 4. Execution result | execute_tool | `gen_ai.tool.result` | `Observation` |
+
+Stage 1 reflects what the agent is configured with — stable over the session. Stage 2 is what was actually sent to the model for a specific inference — may be filtered, reformatted per provider, or vary between calls (e.g., `is_finish` withheld until late). Stages 2–4 are opt-in (`EXGENTIC_OTEL_RECORD_CONTENT=true`).
+
+All LLM calls in exgentic are routed through LiteLLM, so stages 2–3 are guaranteed to emit on every inference.
+
+---
+
 ## Attribute reference
 
 The table below documents every attribute actually emitted by the implementation, organised by span type.
@@ -40,6 +57,7 @@ The table below documents every attribute actually emitted by the implementation
 | **Session (ROOT)** | `exgentic.session.action.{name}.description` | `ActionType.description` | string | Custom | No | |
 | **Session (ROOT)** | `exgentic.session.action.{name}.is_message` | `ActionType.is_message` | bool | Custom | No | |
 | **Session (ROOT)** | `exgentic.session.action.{name}.is_finish` | `ActionType.is_finish` | bool | Custom | No | |
+| **Session (ROOT)** | `exgentic.session.tools` | `Session.actions` | string (JSON) | Custom | No | Comprehensive JSON list of all tools available at session start (name, description, is_message, is_finish). The per-action flat attributes (`exgentic.session.action.{name}.*`) above are deprecated-in-spirit and will be consolidated into this attribute in a follow-up. |
 | **Session (ROOT)** | `exgentic.context.{key}` | `Session.context[key]` | string | Custom | No | One entry per context key |
 | **Session (ROOT)** | `exgentic.session.agent.id` | `AgentInstance.agent_id` | string | Custom | No | |
 | **Session (ROOT)** | `exgentic.session.agent.path` | `AgentInstance.paths.agent_dir` | string | Custom | No | |

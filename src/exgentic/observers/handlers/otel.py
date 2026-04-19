@@ -263,6 +263,16 @@ class OtelTracingObserver(Observer):
                     f"{prefix}.is_finish": action.is_finish,
                 }
             )
+        tools_list = [
+            {
+                "name": action.name,
+                "description": action.description,
+                "is_message": action.is_message,
+                "is_finish": action.is_finish,
+            }
+            for action in session.actions
+        ]
+        span_manager.set_attribute("exgentic.session.tools", _serialize_to_json(tools_list))
 
         for k, v in session.context.items():
             otel_value = to_otel_attribute_value(v)
