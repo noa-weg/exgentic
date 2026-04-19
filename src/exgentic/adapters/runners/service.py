@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 import threading
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import cloudpickle as cp
 import httpx
@@ -119,13 +119,39 @@ def serve(obj: Any, host: str = "0.0.0.0", port: int = 8080) -> None:
 
 
 class HTTPTransport(Transport):
-    """Talks to an HTTP server hosting an ObjectHost."""
+    """Talks to an HTTP server hosting an ObjectHost.
 
-    def __init__(self, base_url: str, timeout: float = 30.0) -> None:
+    If ``is_alive`` is supplied, it is invoked before every RPC; a
+    falsy return (or any exception raised inside it) raises
+    ``ConnectionError`` immediately without touching httpx, so a dead
+    peer fails fast instead of hanging on the transport timeout.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 30.0,
+        *,
+        is_alive: Optional[Callable[[], bool]] = None,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._client = httpx.Client(timeout=timeout)
+        self._is_alive = is_alive
+
+    def _check_alive(self) -> None:
+        if self._is_alive is None:
+            return
+        # A broken watcher is treated as a dead peer: we can't safely
+        # assume the socket is live if the liveness hook itself errors.
+        try:
+            alive = self._is_alive()
+        except Exception as exc:
+            raise ConnectionError(f"{self._base_url}: liveness check failed: {exc}") from exc
+        if not alive:
+            raise ConnectionError(f"{self._base_url}: peer not alive")
 
     def _rpc(self, endpoint: str, payload: dict) -> Any:
+        self._check_alive()
         resp = self._client.post(f"{self._base_url}{endpoint}", json=payload)
         resp.raise_for_status()
         data = RPCResponse(**resp.json())
