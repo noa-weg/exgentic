@@ -2704,6 +2704,110 @@ class TestLLMInferenceContentFiltering:
 
 
 # ===================================================================
+# 4b. LLM inference run_id tagging (regression for #196)
+# ===================================================================
+
+
+class TestLLMInferenceRunIdTagging:
+    """Regression: chat spans must carry ``exgentic.run.id``.
+
+    ``PerSessionFileExporter`` filters by run_id, so without the tag
+    spans are silently dropped from per-session files.
+    """
+
+    @pytest.fixture
+    def llm_trace_setup(self):
+        """Return ``(kwargs, response_obj, mock_ctx, settings)`` shared by tests."""
+        mock_ctx = MagicMock()
+        mock_ctx.session_id = "sess-abc"
+        mock_ctx.run_id = "run-xyz"
+        mock_ctx.otel_context = MagicMock()
+        mock_ctx.otel_context.trace_id = "0" * 32
+        mock_ctx.otel_context.span_id = "0" * 16
+
+        kwargs = {
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "hello"}],
+            "optional_params": {},
+            "litellm_params": {"custom_llm_provider": "openai"},
+        }
+        response_obj = {
+            "id": "chatcmpl-123",
+            "model": "gpt-4o",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "hi"}}],
+        }
+        settings = MagicMock(otel_enabled=True, otel_record_content=True)
+        return kwargs, response_obj, mock_ctx, settings
+
+    def test_chat_span_content_reaches_persession_file_exporter(self, tmp_path, llm_trace_setup):
+        """End-to-end: chat span lands in per-session otel_spans.jsonl with content.
+
+        Routing through ``PerSessionFileExporter`` proves both that
+        ``exgentic.run.id`` is tagged on the span and that
+        ``gen_ai.input.messages`` / ``gen_ai.output.messages`` survive export.
+        """
+        from exgentic.integrations.litellm.trace_logger import TraceLogger
+        from exgentic.utils.otel import PerSessionFileExporter
+
+        kwargs, response_obj, mock_ctx, settings = llm_trace_setup
+        run_root = tmp_path / "run-xyz"
+        per_session = PerSessionFileExporter(run_root, run_id="run-xyz")
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(per_session))
+
+        tl = TraceLogger()
+        tl._tracer = provider.get_tracer("test")
+        tl._otel_logger = MagicMock()
+
+        with (
+            patch("exgentic.integrations.litellm.trace_logger.get_settings", return_value=settings),
+            patch.object(tl, "get_context", return_value=mock_ctx),
+        ):
+            tl._write_otel(kwargs, response_obj, "success")
+
+        jsonl = run_root / "sessions" / "sess-abc" / "otel_spans.jsonl"
+        assert jsonl.exists(), "chat span must be routed to per-session otel_spans.jsonl"
+        content = jsonl.read_text()
+        assert "gen_ai.input.messages" in content
+        assert "gen_ai.output.messages" in content
+
+    def test_init_otel_in_subprocess_without_parent_provider(self, tmp_path, monkeypatch, llm_trace_setup):
+        """Subprocess path must wire PerSessionFileExporter without raising.
+
+        Under a fresh ``ProxyTracerProvider`` (no parent-installed SDK
+        provider, as in venv runners / MCP / aggregation / retriever
+        subprocesses), ``_init_otel`` must construct the exporter with the
+        correct ``(run_root, run_id)`` signature.
+        """
+        from exgentic.integrations.litellm.trace_logger import TraceLogger
+        from opentelemetry import trace as trace_api
+        from opentelemetry.util._once import Once
+
+        _, _, mock_ctx, settings = llm_trace_setup
+        mock_ctx.output_dir = str(tmp_path)
+
+        # Simulate a fresh subprocess: no parent-installed provider, no OTLP env.
+        monkeypatch.delenv("OTEL_EXPORTER_FILE", raising=False)
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+        monkeypatch.setattr(trace_api, "_TRACER_PROVIDER", None, raising=False)
+        monkeypatch.setattr(trace_api, "_TRACER_PROVIDER_SET_ONCE", Once(), raising=False)
+        assert type(trace_api.get_tracer_provider()).__name__ == "ProxyTracerProvider"
+
+        tl = TraceLogger()
+        with (
+            patch("exgentic.integrations.litellm.trace_logger.get_settings", return_value=settings),
+            patch.object(tl, "get_context", return_value=mock_ctx),
+        ):
+            # Must not raise TypeError from PerSessionFileExporter arity mismatch.
+            tl._init_otel({})
+
+        # A real SDK provider was installed and the per-session exporter wired.
+        assert type(trace_api.get_tracer_provider()).__name__ != "ProxyTracerProvider"
+        assert tl._tracer is not None
+
+
+# ===================================================================
 # 5. TraceLogger silent failure behavior
 # ===================================================================
 

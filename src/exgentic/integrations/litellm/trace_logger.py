@@ -139,7 +139,7 @@ class TraceLogger(CustomLogger):
             provider = trace_api.get_tracer_provider()
             if hasattr(provider, "add_span_processor"):
                 base = Path(ctx.output_dir) / ctx.run_id
-                provider.add_span_processor(SimpleSpanProcessor(PerSessionFileExporter(base)))
+                provider.add_span_processor(SimpleSpanProcessor(PerSessionFileExporter(base, ctx.run_id)))
 
         session_root = Path(ctx.output_dir) / ctx.run_id / "sessions" / ctx.session_id
         self._otel_logger = get_session_logger(
@@ -267,6 +267,8 @@ class TraceLogger(CustomLogger):
             "gen_ai.request.model": model,
             "gen_ai.conversation.id": ctx.session_id,
             "exgentic.session.id": ctx.session_id,
+            # Routing key for PerSessionFileExporter.
+            "exgentic.run.id": ctx.run_id,
         }
         self._collect_request_attrs(attrs, optional_params)
         self._collect_response_attrs(attrs, response_obj)
