@@ -5,71 +5,59 @@ from __future__ import annotations
 
 import json
 import re
-import uuid
-from typing import Any, ClassVar
+from typing import Any, Callable, ClassVar, List
 
-from ...core.actions import build_unknown_action
+from ...adapters.agents.code_agent import CodeAgentInstance
 from ...core.agent import Agent
 from ...core.agent_instance import AgentInstance
 from ...core.types import (
-    Action,
     ActionType,
-    Message,
-    MessageAction,
-    MessageObservation,
-    MessagePayload,
     ModelSettings,
-    Observation,
-    ParallelAction,
-    SingleAction,
 )
 from ...utils.sync import run_sync
-from ..litellm_tool_calling.utils import ToolCall, ToolsActionsRegistry
 
 
-def _normalize_cuga_tool_entry(entry: dict[str, Any]) -> ToolCall | None:
-    """Map CUGA / LangChain-style tool call dicts to Exgentic ToolCall."""
-    name = entry.get("name") or entry.get("tool_name") or entry.get("function", {}).get("name")
-    if not name:
-        return None
-    name = str(name)
-    raw_id = entry.get("id") or entry.get("tool_call_id") or f"call_{uuid.uuid4().hex[:24]}"
-    args: Any = (
-        entry.get("arguments")
-        or entry.get("args")
-        or entry.get("input")
-        or entry.get("function", {}).get("arguments")
-    )
-    if isinstance(args, str):
-        arg_str = args
-    else:
+class MultiAppToolProvider:
+    """Splits a flat list of LangChain StructuredTools into per-app groups.
+
+    Tools named ``app__operation`` (double-underscore separator, as used by AppWorld)
+    are grouped under the ``app`` key so that CUGA's ``find_tools("...", "phone")``
+    resolves correctly.  Tools without a ``__`` in their name fall back to the
+    "runtime_tools" bucket — this is the normal path for TAU2 and other benchmarks
+    with flat tool namespaces.
+    """
+
+    def __init__(self, tools: list[Any]) -> None:
+        self._apps: dict[str, list[Any]] = {}
+        for t in tools:
+            app = t.name.split("_")[0] if "_" in t.name else "runtime_tools"
+            self._apps.setdefault(app, []).append(t)
+        self.initialized: bool = False
+
+    async def initialize(self) -> None:
+        self.initialized = True
+
+    async def get_apps(self) -> list[Any]:
         try:
-            arg_str = json.dumps(args, ensure_ascii=False, default=str)
-        except TypeError:
-            arg_str = str(args)
-    return ToolCall(name=name, arguments=arg_str, id=str(raw_id))
+            from cuga.backend.cuga_graph.nodes.cuga_lite.tool_provider_interface import AppDefinition
+        except Exception as exc:
+            raise RuntimeError("CUGA SDK is required for MultiAppToolProvider.") from exc
+        return [AppDefinition(name=app_name, description=app_name) for app_name in self._apps]
+
+    async def get_tools(self, app_name: str) -> list[Any]:
+        return self._apps.get(app_name, [])
+
+    async def get_all_tools(self) -> list[Any]:
+        return [t for tools in self._apps.values() for t in tools]
 
 
-def _dedupe_tool_calls(calls: list[ToolCall]) -> list[ToolCall]:
-    seen: set[tuple[str, str]] = set()
-    out: list[ToolCall] = []
-    for c in calls:
-        key = (c["name"], c["arguments"])
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(c)
-    return out
+class CUGASDKAgentInstance(CodeAgentInstance):
+    """CUGA SDK agent using the CodeAgentInstance pattern.
 
-
-class CUGASDKAgentInstance(AgentInstance):
-    """CUGA SDK-backed agent instance.
-
-    Primary bridge: LangChain StructuredTool objects built from benchmark ActionType definitions
-    (same schema path as ``ToolsActionsRegistry``), ``CugaAgent(tools=...)``, and
-    ``InvokeResult.tool_calls`` / capture-buffer normalization into Exgentic ``Action``.
-
-    Fallback: legacy JSON-in-text parsing from ``InvokeResult.answer`` when no tool calls appear.
+    Runs CUGA's full multi-turn loop once inside ``run_code_agent()``.  Each tool
+    callable is a real executable that blocks until the benchmark environment returns
+    an observation, giving CUGA accurate results to reason over and preserving full
+    conversation context inside CUGA's MemorySaver checkpointer.
     """
 
     def __init__(
@@ -79,92 +67,340 @@ class CUGASDKAgentInstance(AgentInstance):
         context: dict[str, Any] | None = None,
         actions: list[ActionType] | None = None,
         max_steps: int = 150,
-        enable_action_shortlisting: bool = True,
-        max_selected_actions: int = 50,
-        use_legacy_json_fallback: bool = True,
+        model_settings: ModelSettings | None = None,
+        max_tools: int = 60,
     ) -> None:
-        super().__init__(session_id)
-        self.task = task
-        self.context = context or {}
-        self._action_types = list(actions or [])
+        super().__init__(session_id, task, context or {}, list(actions or []))
         self.max_steps = max_steps
-        self._step_count = 0
-        self._transcript_lines: list[str] = []
-        self._registry = ToolsActionsRegistry(self._action_types)
-        self._actions_by_name = {a.name: a for a in self._action_types}
-        self._finish_names = {a.name for a in self._action_types if a.is_finish}
-        self.enable_action_shortlisting = enable_action_shortlisting
-        self.max_selected_actions = max_selected_actions
-        self.use_legacy_json_fallback = use_legacy_json_fallback
-        self._tool_capture_buffer: list[ToolCall] = []
+        self.model_settings = model_settings
+        self.max_tools = max_tools
 
-        env_action_types = [a for a in self._action_types if not a.is_message]
-        self._non_message_action_types = env_action_types
+    # ------------------------------------------------------------------
+    # CodeAgentInstance interface
+    # ------------------------------------------------------------------
 
-    def _shortlist_action_types(self, observation_text: str) -> list[ActionType]:
-        """Heuristic shortlist when the tool count exceeds ``max_selected_actions``."""
-        if not self.enable_action_shortlisting:
-            return self._non_message_action_types
-        cap = max(1, self.max_selected_actions)
-        if len(self._non_message_action_types) <= cap:
-            return self._non_message_action_types
-
-        blob = f"{self.task}\n{observation_text}".lower()
-        words = {w for w in re.findall(r"\w+", blob) if len(w) > 2}
-        scored: list[tuple[int, ActionType]] = []
-        for a in self._non_message_action_types:
-            if a.is_finish:
-                continue
-            desc = f"{a.name} {a.description}".lower()
-            score = sum(1 for w in words if w in desc)
-            scored.append((score, a))
-        scored.sort(key=lambda x: (-x[0], x[1].name))
-
-        finish_actions = [a for a in self._non_message_action_types if a.is_finish]
-        non_finish_budget = max(0, cap - len(finish_actions))
-        picked: list[ActionType] = [a for _, a in scored[:non_finish_budget]]
-        for fa in finish_actions:
-            if fa not in picked:
-                picked.append(fa)
-        return picked[:cap]
-
-    def _build_langchain_tools(self, action_subset: list[ActionType]) -> list[Any]:
+    def run_code_agent(self, functions: List[Callable]) -> None:
         try:
             from langchain_core.tools import StructuredTool
         except Exception as exc:
             raise RuntimeError(
-                "langchain_core is required for CUGA tool bridge (install optional `cuga` extra)."
+                "langchain_core is required for the CUGA tool bridge "
+                "(install optional `cuga` extra)."
             ) from exc
 
-        tools: list[Any] = []
-        for action_type in action_subset:
-            at = action_type
+        # >>>>>>>>>> FINISH-BRIDGE BEGIN (remove when CUGA calls finish natively) <<<<<<<<<<
+        # # Track whether the finish action was called during CUGA's run.
+        # # CUGA's FinalAnswerAgent routes to END via plain text — it never calls
+        # # tools itself.  We need to call the is_finish action explicitly after
+        # # agent.invoke() returns.  The flag prevents a double-call on the rare
+        # # occasion that CUGA does invoke the finish tool directly.
+        # _finish_called: list[bool] = [False]
+        # >>>>>>>>>> FINISH-BRIDGE END <<<<<<<<<<
 
-            def _make_impl(at_ref: ActionType):
-                def _impl(**kwargs: Any) -> str:
-                    try:
-                        arg_str = json.dumps(kwargs, ensure_ascii=False, default=str)
-                    except TypeError:
-                        arg_str = str(kwargs)
-                    tid = f"call_{uuid.uuid4().hex[:24]}"
-                    self._tool_capture_buffer.append(
-                        ToolCall(name=at_ref.name, arguments=arg_str, id=tid),
-                    )
-                    return json.dumps({"recorded": at_ref.name, "id": tid}, ensure_ascii=False)
+        # Build StructuredTools using ActionType schema + real callables.
+        fn_by_name = {fn.__name__: fn for fn in functions}
+        all_tools: list[Any] = []
+        for action_type in self.actions:
+            # Don't expose hidden tools to the LLM.
+            if action_type.is_hidden:
+                continue
+            fn_name = action_type.name.replace(".", "__")
+            fn = fn_by_name.get(fn_name)
+            if fn is None:
+                continue
+            app_name = fn_name.split("__")[0] if "__" in fn_name else "runtime_tools"
 
-                return _impl
+            # >>>>>>>>>> FINISH-BRIDGE BEGIN (remove when CUGA calls finish natively) <<<<<<<<<<
+            # # Wrap the finish callable so we know if CUGA called it itself.
+            # if action_type.is_finish:
+            #     import inspect as _inspect
+            #     _orig_fn = fn
+            #
+            #     def _make_tracked(f: Callable) -> Callable:
+            #         def _tracked(*args: Any, **kwargs: Any) -> Any:
+            #             _finish_called[0] = True
+            #             return f(*args, **kwargs)
+            #
+            #         _tracked.__name__ = f.__name__
+            #         _tracked.__doc__ = f.__doc__
+            #         _tracked.__annotations__ = getattr(f, "__annotations__", {})
+            #         try:
+            #             _tracked.__signature__ = _inspect.signature(f)
+            #         except (ValueError, TypeError):
+            #             pass
+            #         return _tracked
+            #
+            #     fn = _make_tracked(_orig_fn)
+            #     fn_by_name[fn_name] = fn
+            # >>>>>>>>>> FINISH-BRIDGE END <<<<<<<<<<
 
-            tools.append(
-                StructuredTool.from_function(
-                    name=at.name,
-                    description=at.description or at.name,
-                    func=_make_impl(at),
-                    args_schema=at.arguments,  # type: ignore[arg-type]
-                ),
+            # CUGA's sandbox rejects any Python code containing "__" as a suspected
+            # dunder-method security violation.  Exgentic uses "__" as the app/tool
+            # separator (e.g. "supervisor__show_account_passwords"), so we replace
+            # every "__" with a single "_" in the tool name exposed to CUGA.
+            cuga_tool_name = fn_name.replace("__", "_")
+            base_desc = action_type.description or fn_name
+            if action_type.is_finish:
+                base_desc = f"{base_desc} [TASK COMPLETION TOOL]"
+            elif action_type.is_message:
+                base_desc = f"{base_desc} [MESSAGE TOOL]"
+            tool = StructuredTool.from_function(
+                name=cuga_tool_name,
+                description=base_desc,
+                func=fn,
+                args_schema=action_type.arguments,  # type: ignore[arg-type]
             )
-        return tools
+            tool.metadata = {"server_name": app_name}
+            all_tools.append(tool)
 
-    def _get_cuga_agent_class(self) -> Any:
+        # TEMPORARILY DISABLED: _select_tools() pre-selection bypassed to observe
+        # raw CUGA behaviour with all tools exposed.
+        # selected_tools = self._select_tools(all_tools)
+        # threshold = len(selected_tools) + 10
+        selected_tools = all_tools
+
+        # Debug: print selected tools per app.
+        from collections import Counter as _Counter
+        _app_counts = _Counter(
+            (t.name.split("_")[0] if "_" in t.name else "runtime_tools")
+            for t in selected_tools
+        )
+        print(
+            f"[CUGA tool selection] {len(selected_tools)}/{len(all_tools)} tools selected; "
+            f"apps={dict(_app_counts)}; names={[t.name for t in selected_tools]}",
+            flush=True,
+        )
+
+        # Use CUGA's default threshold so find_tools mode activates naturally
+        # when tool count is large (e.g. AppWorld ~480 tools).
+        threshold = 35
+
+        provider = MultiAppToolProvider(tools=selected_tools)
+
+        cuga_agent_cls = self._get_cuga_agent_class()
+        agent = cuga_agent_cls(tool_provider=provider)
+
+        prompt = self._build_prompt()
+        run_sync(
+            agent.invoke(
+                prompt,
+                thread_id=self.session_id,
+                track_tool_calls=True,
+                config={"configurable": {"shortlisting_tool_threshold": threshold}},
+            ),
+            timeout=600.0,
+        )
+
+        # >>>>>>>>>> FINISH-BRIDGE BEGIN (remove when CUGA calls finish natively) <<<<<<<<<<
+        # # agent.invoke() is a single blocking call that runs CUGA's entire
+        # # multi-turn loop.  When it returns, CUGA is completely done and
+        # # InvokeResult.answer holds the final text written by FinalAnswerAgent.
+        # # We now call the benchmark's finish/submit action on CUGA's behalf.
+        # if not _finish_called[0]:
+        #     self._call_finish_action(result, fn_by_name)
+        # >>>>>>>>>> FINISH-BRIDGE END <<<<<<<<<<
+
+    def close(self) -> None:
+        super().close()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _select_tools(self, tools: list[Any]) -> list[Any]:
+        """Return a relevance-scored subset of tools up to ``self.max_tools``.
+
+        App relevance is determined by whether the app's *name* appears as a
+        substring in the task keywords (or vice versa).  This prevents generic
+        keywords like "reset" from accidentally marking every app as relevant
+        (because each app has a reset_password tool).
+
+        The budget is distributed evenly across the relevant apps.  Within each
+        app, tools are ranked by how many task keywords appear in their name or
+        description.  Finish-type tools are always included.
+        """
+        if len(tools) <= self.max_tools:
+            return tools
+
+        # Build keyword set from task text only.
+        blob = self.task.lower()
+        keywords = {w for w in re.findall(r"\w+", blob) if len(w) > 2}
+
+        finish_tools: list[Any] = []
+        candidate_tools: list[Any] = []
+        # Tools are registered with sanitized names (single "_"), so build the
+        # lookup using the same sanitization: "." → "__" → "_".
+        action_types_by_name = {a.name.replace(".", "_"): a for a in self.actions}
+
+        for t in tools:
+            at = action_types_by_name.get(t.name)
+            if at is not None and at.is_finish:
+                finish_tools.append(t)
+            else:
+                candidate_tools.append(t)
+
+        def tool_score(t: Any) -> int:
+            desc = f"{t.name} {t.description or ''}".lower()
+            return sum(1 for w in keywords if w in desc)
+
+        # Group candidates by app prefix.
+        app_tools: dict[str, list[Any]] = {}
+        for t in candidate_tools:
+            # Tool names use single "_" separator; first component is the app.
+            app = t.name.split("_")[0] if "_" in t.name else "runtime_tools"
+            app_tools.setdefault(app, []).append(t)
+
+        # Score each app by whether its name appears in the task keyword set.
+        # Using name-level matching avoids generic keywords (e.g. "reset") from
+        # making every app appear relevant just because each has a reset_password tool.
+        def app_name_score(app: str) -> int:
+            return sum(1 for w in keywords if w in app or app in w)
+
+        app_score = {app: app_name_score(app) for app in app_tools}
+
+        relevant_apps = [a for a in app_tools if app_score[a] > 0]
+        relevant_apps.sort(key=lambda a: app_score[a], reverse=True)
+
+        budget = max(0, self.max_tools - len(finish_tools))
+
+        if not relevant_apps:
+            # No app names matched any task keyword — fall back to flat top-N
+            # by individual tool description score.
+            candidate_tools.sort(key=tool_score, reverse=True)
+            return candidate_tools[:budget] + finish_tools
+
+        # Distribute budget evenly across relevant apps.
+        per_app = max(1, budget // len(relevant_apps))
+        selected: list[Any] = []
+        remainder: list[Any] = []
+
+        for app in relevant_apps:
+            app_ts = sorted(app_tools[app], key=tool_score, reverse=True)
+            take = min(len(app_ts), per_app)
+            selected.extend(app_ts[:take])
+            remainder.extend(app_ts[take:])
+
+        # Fill remaining slots from leftover tools, highest tool score first.
+        remaining = budget - len(selected)
+        if remaining > 0:
+            remainder.sort(key=tool_score, reverse=True)
+            selected.extend(remainder[:remaining])
+
+        return selected + finish_tools
+
+    # >>>>>>>>>> FINISH-BRIDGE BEGIN (remove when CUGA calls finish natively) <<<<<<<<<<
+    def _call_finish_action(self, result: Any, fn_by_name: dict[str, Callable]) -> None:
+        """Call the benchmark's is_finish action using CUGA's final answer.
+
+        CUGA's ``FinalAnswerAgent`` writes a plain-text answer and routes to END
+        — it never calls tools.  This method bridges that gap: after
+        ``agent.invoke()`` returns we find the ``is_finish=True`` action, build
+        kwargs from the args schema, and call the real function so the benchmark
+        receives a proper completion signal.
+
+        The answer value is taken from ``InvokeResult.answer`` (the text written
+        by FinalAnswerAgent).  An empty string is normalised to ``None`` because
+        most AppWorld tasks expect a JSON-null answer for action-only tasks.
+        """
+        finish_action_type = next((a for a in self.actions if a.is_finish), None)
+        if finish_action_type is None:
+            # Benchmark has no finish action (e.g. TAU-2 which uses message).
+            return
+
+        fn_name = finish_action_type.name.replace(".", "__")
+        finish_fn = fn_by_name.get(fn_name)
+        if finish_fn is None:
+            print(
+                f"[CUGA finish] No callable found for finish action '{fn_name}' — skipping.",
+                flush=True,
+            )
+            return
+
+        # Extract answer text from InvokeResult (or any object with .answer).
+        raw_answer: str | None = getattr(result, "answer", None)
+
+        # Build kwargs from the finish action's Pydantic arguments schema.
+        kwargs: dict[str, Any] = {}
+        try:
+            fields = finish_action_type.arguments.model_fields
+        except Exception:
+            fields = {}
+
+        if "answer" in fields:
+            # CUGA's FinalAnswerAgent always produces natural‑language summaries
+            # ("I have created the playlist…") rather than bare JSON values.
+            # AppWorld action‑only tasks expect a JSON‑null answer; a prose string
+            # would fail the `assert answers match` test.  We therefore try to
+            # parse the text as JSON: if it succeeds (e.g. the agent output "42"
+            # or '"Invisible Chains"'), we use the parsed value; if parsing fails
+            # (i.e. it is a prose summary), we fall back to None which serialises
+            # as JSON null — the correct answer for action‑only tasks.
+            answer_value: Any = None
+            if raw_answer and raw_answer.strip():
+                import json as _json
+                try:
+                    answer_value = _json.loads(raw_answer.strip())
+                except (_json.JSONDecodeError, ValueError):
+                    # Natural‑language output → treat as null (action‑only).
+                    answer_value = None
+            kwargs["answer"] = answer_value
+        if "status" in fields:
+            kwargs["status"] = "success"
+
+        print(
+            f"[CUGA finish] Calling '{fn_name}' with kwargs={kwargs!r} "
+            f"(cuga_answer={raw_answer!r})",
+            flush=True,
+        )
+        try:
+            finish_fn(**kwargs)
+        except Exception as exc:
+            print(f"[CUGA finish] Finish action raised: {exc}", flush=True)
+    # >>>>>>>>>> FINISH-BRIDGE END <<<<<<<<<<
+
+    def _build_prompt(self) -> str:
+        prompt = ""
+        if self.context:
+            try:
+                prompt += f"Context: {json.dumps(self.context, ensure_ascii=False, default=str)}\n\n"
+            except TypeError:
+                prompt += f"Context: {self.context}\n\n"
+
+        prompt += (
+            "Complete this task using the available tools. Each tool corresponds to an action "
+            "you can take in the environment. Do not respond or ask clarification questions "
+            "unless done through a dedicated tool, and only if such tool exists. "
+            "Any plain message that is not a tool call will end the run in failure.\n"
+        )
+
+        if self.initial_observation is not None:
+            text = str(self.initial_observation).strip()
+            if text and text.lower() != "none":
+                prompt += f"\nFirst Observation: {text}\n"
+
+        prompt += f"\nTask: {self.task}\n"
+
+        # >>>>>>>>>> FINISH-HINT BEGIN <<<<<<<<<<
+        # Instruct CUGA to call the completion tool at the end of the task.
+        # Placed in the task prompt (not the system prompt) so it is read once
+        # as part of the goal — not repeated every turn, which caused CUGA to
+        # rush to finish before completing the actual work.
+        finish_action = next((a for a in self.actions if a.is_finish), None)
+        if finish_action is not None:
+            prompt += (
+                "\nWhen you have completed all required actions, call the tool marked "
+                "[TASK COMPLETION TOOL] as your final step. "
+                "Pass `answer=None` if the task only required performing actions, or pass "
+                "the specific value if the task asked you to find or return something "
+                "(a name, a number, a date, etc.). "
+                "Always pass `status=\"success\"` if the tool accepts it."
+            )
+        # >>>>>>>>>> FINISH-HINT END <<<<<<<<<<
+
+        return prompt
+
+    @staticmethod
+    def _get_cuga_agent_class() -> Any:
         try:
             from cuga import CugaAgent
         except Exception as exc:
@@ -174,199 +410,6 @@ class CUGASDKAgentInstance(AgentInstance):
             ) from exc
         return CugaAgent
 
-    @staticmethod
-    def _extract_json_object(text: str) -> dict[str, Any] | None:
-        text = text.strip()
-        if not text:
-            return None
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                return parsed
-        except Exception:
-            pass
-        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-        if not match:
-            return None
-        try:
-            parsed = json.loads(match.group(0))
-            if isinstance(parsed, dict):
-                return parsed
-        except Exception:
-            return None
-        return None
-
-    @staticmethod
-    def _observation_to_text(observation: Observation | None) -> str:
-        if observation is None:
-            return "No observation yet."
-        chunks: list[str] = []
-        for idx, obs in enumerate(observation.to_observation_list(), start=1):
-            result = obs.result
-            if isinstance(obs, MessageObservation) and isinstance(obs.result, MessagePayload):
-                result = {"sender": obs.result.sender, "message": obs.result.message}
-            chunks.append(
-                json.dumps(
-                    {
-                        "index": idx,
-                        "result": result,
-                        "invoking_actions": [a.name for a in obs.invoking_actions],
-                    },
-                    ensure_ascii=False,
-                    default=str,
-                ),
-            )
-        return "\n".join(chunks)
-
-    @staticmethod
-    def _extract_response_text(response: Any) -> str:
-        if response is None:
-            return ""
-        if isinstance(response, str):
-            return response
-        answer = getattr(response, "answer", None)
-        if isinstance(answer, str):
-            return answer
-        if isinstance(response, dict):
-            for key in ("answer", "response", "content", "text"):
-                value = response.get(key)
-                if isinstance(value, str):
-                    return value
-        return str(response)
-
-    def _build_action_from_json_payload(self, payload: dict[str, Any]) -> Action | None:
-        if isinstance(payload.get("actions"), list):
-            collected: list[SingleAction] = []
-            for item in payload["actions"]:
-                if not isinstance(item, dict):
-                    continue
-                name = str(item.get("action") or item.get("name") or "").strip()
-                if not name:
-                    continue
-                arguments = item.get("arguments", {})
-                action_type = self._actions_by_name.get(name)
-                action = (
-                    action_type.build_action(arguments)
-                    if action_type is not None
-                    else build_unknown_action(name, arguments)
-                )
-                collected.append(action)
-            if not collected:
-                return None
-            if len(collected) == 1:
-                return collected[0]
-            return ParallelAction(actions=collected)
-
-        name = str(payload.get("action") or payload.get("name") or "").strip()
-        if not name:
-            return None
-        arguments = payload.get("arguments", {})
-        action_type = self._actions_by_name.get(name)
-        if action_type is None:
-            return build_unknown_action(name, arguments)
-        return action_type.build_action(arguments)
-
-    def _fallback_message_action(self, response_text: str) -> Action | None:
-        message_action_type = next((a for a in self._action_types if a.is_message), None)
-        if message_action_type is None and "message" in self._actions_by_name:
-            message_action_type = self._actions_by_name["message"]
-        if message_action_type is None:
-            return None
-        return MessageAction(arguments=Message(content=response_text))
-
-    def _compose_turn_message(self, observation_text: str, step_label: int) -> str:
-        header = (
-            "You are driving an Exgentic benchmark session. "
-            "Use the provided tools to act in the environment. "
-            "Prefer calling tools over plain prose. "
-            "If the task requires finishing or submitting an answer, use the appropriate finish tool when ready.\n"
-        )
-        ctx = ""
-        if self.context:
-            ctx = f"CONTEXT_JSON:\n{json.dumps(self.context, ensure_ascii=False, default=str)}\n\n"
-        transcript = ""
-        if self._transcript_lines:
-            transcript = "PRIOR_STEPS:\n" + "\n".join(self._transcript_lines) + "\n\n"
-        return (
-            f"{header}"
-            f"TASK:\n{self.task}\n\n"
-            f"{ctx}"
-            f"{transcript}"
-            f"STEP_{step_label}_OBSERVATION:\n{observation_text}\n"
-        )
-
-    async def _ainvoke_cuga(self, message: str, tools: list[Any]) -> Any:
-        cuga_agent_cls = self._get_cuga_agent_class()
-        agent = cuga_agent_cls(tools=tools)
-        return await agent.invoke(message, thread_id=self.session_id, track_tool_calls=True)
-
-    def _tool_calls_from_invoke_result(self, result: Any) -> list[ToolCall]:
-        raw = getattr(result, "tool_calls", None) or []
-        out: list[ToolCall] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            norm = _normalize_cuga_tool_entry(item)
-            if norm is not None:
-                out.append(norm)
-        return out
-
-    def react(self, observation: Observation | None) -> Action | None:
-        self._step_count += 1
-        if self._step_count > self.max_steps:
-            self.logger.warning("Finished: max steps reached (%d)", self.max_steps)
-            return None
-
-        observation_text = self._observation_to_text(observation)
-        self._tool_capture_buffer.clear()
-
-        action_subset = self._shortlist_action_types(observation_text)
-        tools = self._build_langchain_tools(action_subset)
-
-        message = self._compose_turn_message(observation_text, self._step_count)
-        err: str | None = None
-        response_text = ""
-        try:
-            result = run_sync(self._ainvoke_cuga(message, tools), timeout=300.0)
-            err = getattr(result, "error", None)
-            response_text = self._extract_response_text(result)
-            if err:
-                self.logger.warning("CUGA invoke reported error: %s", err)
-        except Exception as exc:
-            self.logger.exception("CUGA invoke failed: %s", exc)
-            if self.use_legacy_json_fallback:
-                return self._fallback_message_action(f"CUGA error: {exc!s}")
-            raise
-
-        combined_calls = list(self._tool_capture_buffer)
-        combined_calls.extend(self._tool_calls_from_invoke_result(result))
-        combined_calls = _dedupe_tool_calls(combined_calls)
-
-        if combined_calls:
-            action = self._registry.tool_calls_to_action(combined_calls)
-            if action is not None:
-                self._transcript_lines.append(
-                    f"step_{self._step_count}: acted with tool calls: {[c['name'] for c in combined_calls]}",
-                )
-                return action
-
-        if self.use_legacy_json_fallback:
-            payload = self._extract_json_object(response_text)
-            if payload is not None:
-                action = self._build_action_from_json_payload(payload)
-                if action is not None:
-                    self._transcript_lines.append(f"step_{self._step_count}: legacy JSON action")
-                    return action
-            fallback = self._fallback_message_action(response_text)
-            if fallback is not None:
-                self._transcript_lines.append(f"step_{self._step_count}: message fallback")
-            return fallback
-
-        return None
-
-    def close(self) -> None:
-        return None
-
 
 class CUGASDKAgent(Agent):
     display_name: ClassVar[str] = "CUGA SDK"
@@ -374,9 +417,11 @@ class CUGASDKAgent(Agent):
 
     max_steps: int = 150
     model_settings: ModelSettings | None = None
-    enable_action_shortlisting: bool = False
-    max_selected_actions: int = 50
-    use_legacy_json_fallback: bool = True
+    # Maximum number of tools to expose per CUGA invocation.  Tools are scored
+    # by relevance to the task; finish tools are always included.  Setting this
+    # below CUGA's find_tools threshold (default 35) ensures all selected tools
+    # appear directly in the model's prompt rather than behind find_tools.
+    max_tools: int = 60
 
     def assign(
         self,
@@ -391,7 +436,6 @@ class CUGASDKAgent(Agent):
             context=context,
             actions=actions,
             max_steps=self.max_steps,
-            enable_action_shortlisting=self.enable_action_shortlisting,
-            max_selected_actions=self.max_selected_actions,
-            use_legacy_json_fallback=self.use_legacy_json_fallback,
+            model_settings=self.model_settings,
+            max_tools=self.max_tools,
         )

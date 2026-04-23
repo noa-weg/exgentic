@@ -8,6 +8,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from pydantic import BaseModel
+
 from ... import __version__ as exgentic_version
 from ...core.orchestrator.observer import Observer
 from ...core.orchestrator.termination import (
@@ -32,6 +34,17 @@ from ...core.types import (
 from ...interfaces.registry import get_agent_entries, get_benchmark_entries
 from ...utils.cost import CostReport, accumulate_reports
 from .session_ledger import SessionLedger
+
+
+def _trajectory_json_safe(model: BaseModel) -> Any:
+    """Build a JSON-serializable dict from a Pydantic model for trajectory.jsonl.
+
+    Observations use ``SingleObservation.result: Any``; values may be exceptions or
+    other non-JSON-native objects. ``model_dump_json()`` raises
+    ``PydanticSerializationError`` for those; a round-trip with ``default=str`` keeps
+    the run alive and preserves a readable string form.
+    """
+    return json.loads(json.dumps(model.model_dump(), default=str))
 
 
 @dataclass
@@ -187,7 +200,7 @@ class ResultsObserver(Observer):
             "session_number": session_number,
             "task_id": session.task_id,
             "step": step_n,
-            "action": json.loads(action.model_dump_json()),
+            "action": _trajectory_json_safe(action),
             "initial": False,
             "agent_cost": agent_cost,
             "benchmark_cost": benchmark_cost,
@@ -211,7 +224,7 @@ class ResultsObserver(Observer):
         agent_cost, benchmark_cost = self._get_cost_snapshot(session_id, session)
         traj_path = session.paths.trajectory
         traj_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.loads(observation.model_dump_json()) if observation is not None else None
+        payload = _trajectory_json_safe(observation) if observation is not None else None
         event = {
             "event": "observation",
             "run_id": self._run_id,
