@@ -372,6 +372,12 @@ class CUGASDKAgentInstance(CodeAgentInstance):
         The hint is placed in the task prompt (not in a system prompt) so it is
         read once as part of the goal statement.  Putting it in the system
         prompt caused CUGA to rush to finish before completing the actual work.
+
+        Important: CUGA must omit ``answer`` entirely for action-only tasks
+        rather than passing ``answer=None``.  The Pydantic model for the finish
+        action has ``answer: Union[float, int, str]`` (no None in the union)
+        with a default of None — so omitting the argument uses the default
+        safely, but passing None explicitly triggers a validation error.
         """
         prompt = ""
 
@@ -402,9 +408,10 @@ class CUGASDKAgentInstance(CodeAgentInstance):
             prompt += (
                 f"\nWhen you have completed all required actions, call `{cuga_finish_name}` "
                 "as your final step. "
-                "Pass `answer=None` if the task only required performing actions, or pass "
-                "the specific value if the task asked you to find or return something "
-                "(a name, a number, a date, etc.). "
+                "If the task asked you to find or return a specific value (a name, a number, "
+                "a date, etc.), pass it as `answer=<value>`. "
+                "If the task only required performing actions and no answer is needed, "
+                "do NOT pass the `answer` argument at all — omit it entirely. "
                 "Always pass `status=\"success\"` if the tool accepts it."
             )
 
