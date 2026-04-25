@@ -373,11 +373,12 @@ class CUGASDKAgentInstance(CodeAgentInstance):
         read once as part of the goal statement.  Putting it in the system
         prompt caused CUGA to rush to finish before completing the actual work.
 
-        Important: CUGA must omit ``answer`` entirely for action-only tasks
-        rather than passing ``answer=None``.  The Pydantic model for the finish
-        action has ``answer: Union[float, int, str]`` (no None in the union)
-        with a default of None — so omitting the argument uses the default
-        safely, but passing None explicitly triggers a validation error.
+        Important: for optional finish arguments that are not needed, CUGA must
+        omit them entirely rather than passing ``None``.  The Pydantic models
+        generated from JSON Schema use ``Union[...]`` without ``Optional``, so
+        passing ``None`` explicitly triggers a validation error even when the
+        field has a ``None`` default.  Omitting the argument uses the default
+        safely.
         """
         prompt = ""
 
@@ -408,11 +409,9 @@ class CUGASDKAgentInstance(CodeAgentInstance):
             prompt += (
                 f"\nWhen you have completed all required actions, call `{cuga_finish_name}` "
                 "as your final step. "
-                "If the task asked you to find or return a specific value (a name, a number, "
-                "a date, etc.), pass it as `answer=<value>`. "
-                "If the task only required performing actions and no answer is needed, "
-                "do NOT pass the `answer` argument at all — omit it entirely. "
-                "Always pass `status=\"success\"` if the tool accepts it."
+                "Fill in any required arguments based on what the task asked for. "
+                "For any optional arguments that are not needed, omit them entirely — "
+                "do not pass None."
             )
 
         return prompt
