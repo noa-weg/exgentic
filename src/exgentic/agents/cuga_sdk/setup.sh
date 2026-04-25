@@ -1,24 +1,23 @@
 #!/bin/bash
 # Install CUGA SDK agent dependencies
 
+set -euo pipefail
+
 echo "Installing CUGA SDK Agent..."
 
-if [ ! -f "pyproject.toml" ]; then
-    echo "Error: setup.sh must be run from the root directory of the Exgentic project"
+# Resolve the exgentic project root relative to this script's location.
+# setup.sh lives at: src/exgentic/agents/cuga_sdk/setup.sh
+# Project root is 4 levels up from this script.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
+if [ ! -f "$PROJECT_ROOT/pyproject.toml" ]; then
+    echo "Error: could not find pyproject.toml at $PROJECT_ROOT" >&2
     exit 1
 fi
 
-if command -v uv >/dev/null 2>&1; then
-    echo "Using uv for installation..."
-    uv pip install -e ".[cuga]"
-else
-    echo "Using pip for installation..."
-    python -m pip install -e ".[cuga]"
-fi
+# The venv is created with `uv venv` (no pip). Use `uv pip install` which
+# respects the VIRTUAL_ENV env var set by exgentic's run_setup_sh helper.
+uv pip install -e "$PROJECT_ROOT"
 
-if [ $? -eq 0 ]; then
-    echo "CUGA SDK Agent installed successfully"
-else
-    echo "CUGA SDK Agent installation failed"
-    exit 1
-fi
+echo "CUGA SDK Agent installed successfully"

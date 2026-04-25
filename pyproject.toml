@@ -48,10 +48,6 @@ cli = [
     "litellm[proxy]"
 ]
 
-cuga = [
-    "cuga>=0.2.10",
-]
-
 dev = [
     "langchain-core>=0.3",
     "pytest>=7.0.0",
