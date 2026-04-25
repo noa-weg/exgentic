@@ -1,6 +1,53 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2026, The Exgentic organization and its contributors.
 
+"""CUGA SDK agent instance — CodeAgentInstance implementation.
+
+Architecture overview
+---------------------
+CUGA is a multi-turn agentic system that runs its own internal planning,
+tool-selection, execution, and reflection loop.  This module bridges CUGA
+into exgentic's ``CodeAgentInstance`` pattern so CUGA runs correctly inside
+the benchmark evaluation harness.
+
+Threading model
+~~~~~~~~~~~~~~~
+exgentic's ``AgentCoordinator`` spawns a dedicated agent thread and drives
+it by passing observations one at a time.  ``CodeAgentInstance`` subclasses
+work differently: ``run_code_agent()`` is called **once** on the agent thread
+and is expected to run the agent's full loop to completion before returning.
+Tool calls inside that loop are real callables that block on
+``self.execute(action)`` — which posts the action to the coordinator thread,
+waits for the benchmark environment to execute it, and returns the
+observation.  This gives CUGA accurate, live results to reason over.
+
+    env thread                     agent thread
+    ----------                     ------------
+    coordinator.react(obs) ──────► run_code_agent() starts
+                                   agent.invoke(prompt, ...)
+                                     CUGA internal loop begins
+                                     CUGA calls tool fn (StructuredTool.func)
+                                       └─ fn calls self.execute(action)
+                                            └─ posts action, waits on condition
+    condition notified ◄───────────  benchmark executes action, returns obs
+    obs returned        ──────────►  condition.wait() returns with obs
+                                     tool fn returns obs string to CUGA
+                                     CUGA continues next turn …
+                                   agent.invoke() returns
+                                   run_code_agent() returns
+    coordinator done    ◄──────────  execute(None) signals done
+
+Tool naming
+~~~~~~~~~~~
+exgentic uses ``"."`` as the action-name separator (e.g. ``phone.login``) and
+``"__"`` as the StructuredTool name separator (e.g. ``phone__login``).  CUGA's
+sandbox rejects any identifier containing ``"__"`` as a suspected dunder
+security violation, so every ``"__"`` is replaced with a single ``"_"`` in
+the tool name exposed to CUGA (e.g. ``phone_login``).  App grouping therefore
+cannot rely on splitting the tool name — it uses ``metadata["server_name"]``
+instead (set explicitly on each StructuredTool before passing to the provider).
+"""
+
 from __future__ import annotations
 
 import json
@@ -13,15 +60,17 @@ from ...utils.sync import run_sync
 
 
 class _TokenAccumulator:
-    """LangChain BaseCallbackHandler that sums token usage across all LLM calls.
+    """Accumulates token usage across all LLM calls made during a CUGA run.
 
-    CUGA runs multiple internal LLM calls (planner, tool selector, executor,
-    reflector, final-answer).  Each fires ``on_llm_end`` with token counts in
-    ``response.llm_output``.  We accumulate them here so ``get_cost()`` can
-    report the total for the entire task.
+    CUGA executes multiple internal LLM calls per task (planner, tool selector,
+    executor, reflector, final-answer agent).  Each call fires LangChain's
+    ``on_llm_end`` callback with token counts in ``response.llm_output``.  This
+    class sums those counts so ``CUGASDKAgentInstance.get_cost()`` can report
+    the total cost for the entire task as a single ``CostReport``.
 
-    We inherit lazily so the import of langchain_core is deferred until CUGA is
-    actually used — keeping exgentic importable without langchain installed.
+    The LangChain ``BaseCallbackHandler`` subclass is created lazily on first
+    access of ``handler`` so that ``langchain_core`` is only imported when CUGA
+    is actually used — keeping exgentic importable without langchain installed.
     """
 
     def __init__(self) -> None:
@@ -30,6 +79,7 @@ class _TokenAccumulator:
         self._handler: Any = None
 
     def _ensure_handler(self) -> Any:
+        """Create and cache the LangChain callback handler on first use."""
         if self._handler is not None:
             return self._handler
         try:
@@ -58,20 +108,35 @@ class _TokenAccumulator:
 
     @property
     def handler(self) -> Any:
+        """The LangChain BaseCallbackHandler instance, created lazily."""
         return self._ensure_handler()
 
 
 class MultiAppToolProvider:
-    """Splits a flat list of LangChain StructuredTools into per-app groups.
+    """Groups LangChain StructuredTools by app and exposes them to CUGA.
 
-    Each tool must have its ``metadata["server_name"]`` set to the app it belongs to
-    (e.g. ``"phone"``, ``"file_system"``).  Tools without a ``server_name`` fall back
-    to the ``"runtime_tools"`` bucket — this is the normal path for TAU2 and other
-    benchmarks with flat tool namespaces.
+    CUGA's tool-provider interface lets it discover tools per application
+    (e.g. ``phone``, ``spotify``) rather than receiving a single flat list.
+    This is important for large tool sets (e.g. AppWorld's ~468 tools): when
+    the total count exceeds CUGA's ``shortlisting_tool_threshold`` (default 35),
+    CUGA switches to ``find_tools`` mode and queries this provider by app name
+    to narrow the candidate set before each action.
 
-    Note: tool names exposed to CUGA use single ``_`` (e.g. ``phone_login``) because
-    CUGA rejects ``__`` as a dunder-security violation.  App grouping must therefore
-    rely on ``metadata["server_name"]``, not on splitting the tool name.
+    Grouping strategy
+    ~~~~~~~~~~~~~~~~~
+    Each tool must have ``metadata["server_name"]`` set to its app name before
+    being passed here.  Tools without a ``server_name`` fall back to the
+    ``"runtime_tools"`` bucket — this covers flat-namespace benchmarks (e.g.
+    TAU2) where tools have no app prefix.
+
+    The ``finish`` tool problem
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    AppWorld's task-completion action is named ``"finish"`` with no app prefix,
+    so it lands in ``"runtime_tools"``.  CUGA searches for tools by app name,
+    so if it searches ``"supervisor"`` it would miss ``"finish"`` entirely.
+    ``get_tools()`` therefore always appends the ``"runtime_tools"`` bucket to
+    every per-app result, ensuring finish (and any other app-less tools) are
+    always visible regardless of which app CUGA queries.
     """
 
     def __init__(self, tools: list[Any]) -> None:
@@ -93,12 +158,13 @@ class MultiAppToolProvider:
 
     async def get_tools(self, app_name: str) -> list[Any]:
         app_tools = self._apps.get(app_name, [])
-        # Always include runtime_tools alongside the requested app.
-        # "runtime_tools" holds tools with no app prefix (e.g. the finish/
-        # complete-task tool in AppWorld whose action name is just "finish").
-        # CUGA searches by app name and would miss these tools otherwise.
+        # Always append runtime_tools alongside the requested app's tools.
+        # runtime_tools holds tools that have no app prefix (e.g. AppWorld's
+        # "finish" action).  Without this, CUGA would never find "finish" when
+        # searching any named app, causing the task to end without a completion
+        # signal (action_count=0 symptom).
         # For flat-namespace benchmarks (TAU2) all tools are already in
-        # runtime_tools, so this is a no-op.
+        # runtime_tools, so this is a no-op for those cases.
         if app_name != "runtime_tools":
             seen_names = {t.name for t in app_tools}
             runtime_extras = [
@@ -113,12 +179,24 @@ class MultiAppToolProvider:
 
 
 class CUGASDKAgentInstance(CodeAgentInstance):
-    """CUGA SDK agent using the CodeAgentInstance pattern.
+    """CUGA SDK agent instance — runs CUGA's full multi-turn loop for one task.
 
-    Runs CUGA's full multi-turn loop once inside ``run_code_agent()``.  Each tool
-    callable is a real executable that blocks until the benchmark environment returns
-    an observation, giving CUGA accurate results to reason over and preserving full
-    conversation context inside CUGA's MemorySaver checkpointer.
+    This class implements the ``CodeAgentInstance`` interface, which means
+    ``run_code_agent()`` is called once per task with a list of real callable
+    functions (one per action type).  It wraps those functions as LangChain
+    ``StructuredTool`` objects, hands them to a ``MultiAppToolProvider``, and
+    invokes CUGA's ``CugaAgent.invoke()`` which runs the entire planning +
+    execution + reflection loop internally.
+
+    Each tool callable, when invoked by CUGA, calls ``self.execute(action)``
+    which synchronises with the benchmark environment via the
+    ``AgentCoordinator`` thread bridge (see module docstring).
+
+    Cost tracking
+    ~~~~~~~~~~~~~
+    A ``_TokenAccumulator`` callback handler is registered with CUGA's
+    LangGraph invocation so token counts from every internal LLM call are
+    summed and exposed via ``get_cost()``.
     """
 
     def __init__(
@@ -143,25 +221,40 @@ class CUGASDKAgentInstance(CodeAgentInstance):
     # ------------------------------------------------------------------
 
     def run_code_agent(self, functions: List[Callable]) -> None:
-        # Configure CUGA env vars before the first `import cuga`.
-        # cuga/config.py reads AGENT_SETTING_CONFIG at module-import time, so
-        # these must be set before _get_cuga_agent_class() triggers the import.
-        # The agent subprocess only receives forwarded env vars (API keys, OTEL)
-        # from the parent; CUGA-specific config vars must be set here explicitly.
+        """Run CUGA's full multi-turn loop for the current task.
+
+        Sets required environment variables, wraps each action as a
+        LangChain ``StructuredTool``, creates a ``MultiAppToolProvider``,
+        and calls ``CugaAgent.invoke()`` which blocks until CUGA has
+        completed (or exhausted) its internal loop.
+        """
         import os as _os
+
+        # --- Environment variable setup ---
+        # CUGA reads configuration at module-import time via dynaconf, so
+        # these must be set before the first ``import cuga`` statement
+        # (triggered below by ``_get_cuga_agent_class()``).
+
+        # Select CUGA's settings file based on the provider prefix in model_id
+        # (e.g. "groq/openai/gpt-oss-120b" → provider "groq" → settings.groq.toml).
+        # Only set if not already overridden in the environment.
         _provider = self.model_id.split("/")[0].lower() if "/" in self.model_id else ""
         if "AGENT_SETTING_CONFIG" not in _os.environ:
-            # Select CUGA settings file based on the provider prefix in model_id
-            # (e.g. "groq/openai/gpt-oss-120b" → provider "groq").
-            # Fall back to the old GROQ_API_KEY heuristic for bare model strings.
             if _provider == "groq" or _os.environ.get("GROQ_API_KEY"):
                 _os.environ["AGENT_SETTING_CONFIG"] = "settings.groq.toml"
+
+        # Strip the provider prefix so CUGA receives its native model string.
+        # e.g. "groq/openai/gpt-oss-120b" → MODEL_NAME = "openai/gpt-oss-120b"
+        # Without this, CUGA falls back to the Groq platform default (gpt-oss-20b)
+        # which is too small for complex tool-use tasks.
         if "MODEL_NAME" not in _os.environ and _provider:
-            # Strip provider prefix so CUGA receives its native model string.
-            # "groq/openai/gpt-oss-120b" → "openai/gpt-oss-120b"
             _os.environ["MODEL_NAME"] = self.model_id[len(_provider) + 1:]
-        # Always apply the configured cuga_mode (allows overriding env default).
+
+        # Always honour the configured cuga_mode (overrides any env default).
         _os.environ["DYNACONF_FEATURES__CUGA_MODE"] = self.cuga_mode
+
+        # Disable CUGA's chat mode — exgentic drives the agent programmatically,
+        # not through an interactive chat interface.
         if "DYNACONF_FEATURES__CHAT" not in _os.environ:
             _os.environ["DYNACONF_FEATURES__CHAT"] = "false"
 
@@ -173,78 +266,61 @@ class CUGASDKAgentInstance(CodeAgentInstance):
                 "(install optional `cuga` extra)."
             ) from exc
 
-        # >>>>>>>>>> FINISH-BRIDGE BEGIN (remove when CUGA calls finish natively) <<<<<<<<<<
-        # # Track whether the finish action was called during CUGA's run.
-        # # CUGA's FinalAnswerAgent routes to END via plain text — it never calls
-        # # tools itself.  We need to call the is_finish action explicitly after
-        # # agent.invoke() returns.  The flag prevents a double-call on the rare
-        # # occasion that CUGA does invoke the finish tool directly.
-        # _finish_called: list[bool] = [False]
-        # >>>>>>>>>> FINISH-BRIDGE END <<<<<<<<<<
-
-        # Build StructuredTools using ActionType schema + real callables.
+        # --- Build LangChain StructuredTools from exgentic ActionTypes ---
+        # Each ActionType has a Pydantic args_schema and a matching callable
+        # (produced by action_type_to_function()).  We expose these to CUGA as
+        # StructuredTools so CUGA can call them like normal Python functions.
         fn_by_name = {fn.__name__: fn for fn in functions}
         all_tools: list[Any] = []
         for action_type in self.actions:
-            # Don't expose hidden tools to the LLM.
+            # Hidden actions (e.g. internal signals) are not exposed to the LLM.
             if action_type.is_hidden:
                 continue
             fn_name = action_type.name.replace(".", "__")
             fn = fn_by_name.get(fn_name)
             if fn is None:
                 continue
+
+            # Derive the app name from the function name for provider grouping.
+            # "phone__login" → app "phone"; "finish" → app "runtime_tools".
             app_name = fn_name.split("__")[0] if "__" in fn_name else "runtime_tools"
 
-            # >>>>>>>>>> FINISH-BRIDGE BEGIN (remove when CUGA calls finish natively) <<<<<<<<<<
-            # # Wrap the finish callable so we know if CUGA called it itself.
-            # if action_type.is_finish:
-            #     import inspect as _inspect
-            #     _orig_fn = fn
-            #
-            #     def _make_tracked(f: Callable) -> Callable:
-            #         def _tracked(*args: Any, **kwargs: Any) -> Any:
-            #             _finish_called[0] = True
-            #             return f(*args, **kwargs)
-            #
-            #         _tracked.__name__ = f.__name__
-            #         _tracked.__doc__ = f.__doc__
-            #         _tracked.__annotations__ = getattr(f, "__annotations__", {})
-            #         try:
-            #             _tracked.__signature__ = _inspect.signature(f)
-            #         except (ValueError, TypeError):
-            #             pass
-            #         return _tracked
-            #
-            #     fn = _make_tracked(_orig_fn)
-            #     fn_by_name[fn_name] = fn
-            # >>>>>>>>>> FINISH-BRIDGE END <<<<<<<<<<
-
-            # CUGA's sandbox rejects any Python code containing "__" as a suspected
-            # dunder-method security violation.  Exgentic uses "__" as the app/tool
-            # separator (e.g. "supervisor__show_account_passwords"), so we replace
-            # every "__" with a single "_" in the tool name exposed to CUGA.
+            # Replace "__" with "_" in the tool name exposed to CUGA.
+            # CUGA's sandbox treats any identifier containing "__" as a dunder
+            # security violation and rejects the generated code.
             cuga_tool_name = fn_name.replace("__", "_")
+
+            # Annotate the finish and message tools so CUGA knows their roles.
             base_desc = action_type.description or fn_name
             if action_type.is_finish:
                 base_desc = f"{base_desc} [TASK COMPLETION TOOL]"
             elif action_type.is_message:
                 base_desc = f"{base_desc} [MESSAGE TOOL]"
+
             tool = StructuredTool.from_function(
                 name=cuga_tool_name,
                 description=base_desc,
                 func=fn,
                 args_schema=action_type.arguments,  # type: ignore[arg-type]
             )
+            # Store the app name in metadata so MultiAppToolProvider can group
+            # tools by app without relying on the sanitized tool name.
             tool.metadata = {"server_name": app_name}
             all_tools.append(tool)
 
-        # threshold=35: CUGA default — find_tools activates for large tool sets.
+        # --- Create provider and agent ---
+        # shortlist_threshold=35 matches CUGA's default: when tool count exceeds
+        # this, CUGA activates find_tools mode and queries the provider by app
+        # name rather than loading all tools at once.
         shortlist_threshold = 35
 
         provider = MultiAppToolProvider(tools=all_tools)
         cuga_agent_cls = self._get_cuga_agent_class()
         agent = cuga_agent_cls(tool_provider=provider)
 
+        # --- Invoke CUGA ---
+        # Register the token accumulator as a LangChain callback so every
+        # internal LLM call contributes to cost reporting.
         self._token_accumulator = _TokenAccumulator()
         prompt = self._build_prompt()
         run_sync(
@@ -260,19 +336,11 @@ class CUGASDKAgentInstance(CodeAgentInstance):
             timeout=self.invoke_timeout,
         )
 
-        # >>>>>>>>>> FINISH-BRIDGE BEGIN (remove when CUGA calls finish natively) <<<<<<<<<<
-        # # agent.invoke() is a single blocking call that runs CUGA's entire
-        # # multi-turn loop.  When it returns, CUGA is completely done and
-        # # InvokeResult.answer holds the final text written by FinalAnswerAgent.
-        # # We now call the benchmark's finish/submit action on CUGA's behalf.
-        # if not _finish_called[0]:
-        #     self._call_finish_action(result, fn_by_name)
-        # >>>>>>>>>> FINISH-BRIDGE END <<<<<<<<<<
-
     def close(self) -> None:
         super().close()
 
     def get_cost(self) -> CostReport:
+        """Return total LLM cost accumulated across all of CUGA's internal calls."""
         if self._token_accumulator is None:
             return LiteLLMCostReport.initialize_empty(model_name=self.model_id)
         return LiteLLMCostReport.from_token_counts(
@@ -282,57 +350,31 @@ class CUGASDKAgentInstance(CodeAgentInstance):
         )
 
     # ------------------------------------------------------------------
-    # Helpers
+    # Private helpers
     # ------------------------------------------------------------------
 
-    # >>>>>>>>>> FINISH-BRIDGE BEGIN (remove when CUGA calls finish natively) <<<<<<<<<<
-    def _call_finish_action(self, result: Any, fn_by_name: dict[str, Callable]) -> None:
-        """Call the benchmark's is_finish action using CUGA's final answer."""
-        finish_action_type = next((a for a in self.actions if a.is_finish), None)
-        if finish_action_type is None:
-            return
-
-        fn_name = finish_action_type.name.replace(".", "__")
-        finish_fn = fn_by_name.get(fn_name)
-        if finish_fn is None:
-            print(
-                f"[CUGA finish] No callable found for finish action '{fn_name}' — skipping.",
-                flush=True,
-            )
-            return
-
-        raw_answer: str | None = getattr(result, "answer", None)
-
-        kwargs: dict[str, Any] = {}
-        try:
-            fields = finish_action_type.arguments.model_fields
-        except Exception:
-            fields = {}
-
-        if "answer" in fields:
-            answer_value: Any = None
-            if raw_answer and raw_answer.strip():
-                try:
-                    answer_value = json.loads(raw_answer.strip())
-                except (json.JSONDecodeError, ValueError):
-                    answer_value = None
-            kwargs["answer"] = answer_value
-        if "status" in fields:
-            kwargs["status"] = "success"
-
-        print(
-            f"[CUGA finish] Calling '{fn_name}' with kwargs={kwargs!r} "
-            f"(cuga_answer={raw_answer!r})",
-            flush=True,
-        )
-        try:
-            finish_fn(**kwargs)
-        except Exception as exc:
-            print(f"[CUGA finish] Finish action raised: {exc}", flush=True)
-    # >>>>>>>>>> FINISH-BRIDGE END <<<<<<<<<<
-
     def _build_prompt(self) -> str:
+        """Build the initial task prompt passed to CUGA's agent.invoke().
+
+        The prompt includes:
+        - Optional context (JSON-serialised) from the benchmark environment
+        - A standing instruction reminding CUGA to only communicate via tools
+        - The initial observation, if the benchmark provided one at task start
+        - The task description
+        - An explicit instruction to call the finish tool by name when done,
+          including guidance on how to pass the ``answer`` and ``status`` args
+
+        The finish-tool hint uses the exact tool name (e.g. ``supervisor_finish``)
+        rather than the ``[TASK COMPLETION TOOL]`` description marker because
+        CUGA follows its own "return text when done" rule by default and only
+        calls the finish tool when given the precise function name.
+
+        The hint is placed in the task prompt (not in a system prompt) so it is
+        read once as part of the goal statement.  Putting it in the system
+        prompt caused CUGA to rush to finish before completing the actual work.
+        """
         prompt = ""
+
         if self.context:
             try:
                 prompt += f"Context: {json.dumps(self.context, ensure_ascii=False, default=str)}\n\n"
@@ -353,19 +395,8 @@ class CUGASDKAgentInstance(CodeAgentInstance):
 
         prompt += f"\nTask: {self.task}\n"
 
-        # >>>>>>>>>> FINISH-HINT BEGIN <<<<<<<<<<
-        # Instruct CUGA to call the completion tool at the end of the task.
-        # Placed in the task prompt (not the system prompt) so it is read once
-        # as part of the goal — not repeated every turn, which caused CUGA to
-        # rush to finish before completing the actual work.
         finish_action = next((a for a in self.actions if a.is_finish), None)
         if finish_action is not None:
-            # >>>>>>>>>> FINISH-HINT-EXACT-NAME BEGIN <<<<<<<<<<
-            # Use the exact tool name rather than the "[TASK COMPLETION TOOL]" marker.
-            # CUGA ignores the marker and follows its own "return text when done" rule,
-            # so it never calls the finish tool unless given the precise name.
-            # Remove this block (and restore the original string below) if CUGA gains
-            # native awareness of the completion tool without name-hinting.
             fn_name = finish_action.name.replace(".", "__")
             cuga_finish_name = fn_name.replace("__", "_")
             prompt += (
@@ -376,13 +407,16 @@ class CUGASDKAgentInstance(CodeAgentInstance):
                 "(a name, a number, a date, etc.). "
                 "Always pass `status=\"success\"` if the tool accepts it."
             )
-            # >>>>>>>>>> FINISH-HINT-EXACT-NAME END <<<<<<<<<<
-        # >>>>>>>>>> FINISH-HINT END <<<<<<<<<<
 
         return prompt
 
     @staticmethod
     def _get_cuga_agent_class() -> Any:
+        """Import and return the CugaAgent class from the cuga package.
+
+        Raises a clear RuntimeError if the cuga package is not installed,
+        pointing the user to the setup command.
+        """
         try:
             from cuga import CugaAgent
         except Exception as exc:
