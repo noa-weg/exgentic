@@ -55,6 +55,7 @@ from typing import Any, Callable, List
 
 from ...adapters.agents.code_agent import CodeAgentInstance
 from ...core.types import ModelSettings
+from ...observers.logging import add_loguru_file_sink, remove_loguru_sink
 from ...utils.cost import CostReport, LiteLLMCostReport
 from ...utils.sync import run_sync
 
@@ -273,9 +274,6 @@ class CUGASDKAgentInstance(CodeAgentInstance):
         fn_by_name = {fn.__name__: fn for fn in functions}
         all_tools: list[Any] = []
         for action_type in self.actions:
-            # Hidden actions (e.g. internal signals) are not exposed to the LLM.
-            if action_type.is_hidden:
-                continue
             fn_name = action_type.name.replace(".", "__")
             fn = fn_by_name.get(fn_name)
             if fn is None:
@@ -318,23 +316,278 @@ class CUGASDKAgentInstance(CodeAgentInstance):
         cuga_agent_cls = self._get_cuga_agent_class()
         agent = cuga_agent_cls(tool_provider=provider)
 
-        # --- Invoke CUGA ---
+        # --- Log tools and invoke CUGA ---
+        self.logger.info(
+            "Passing %d tools to CUGA: %s",
+            len(all_tools),
+            [t.name for t in all_tools],
+        )
+
+        # Route CUGA's loguru output (tool init, planning, code execution, etc.)
+        # to the same agent.log file used by this session's exgentic logger.
+        import logging as _logging
+        _file_handler = next(
+            (h for h in self.logger.handlers if isinstance(h, _logging.FileHandler)),
+            None,
+        )
+        _loguru_sink_id = None
+        if _file_handler is not None:
+            _loguru_sink_id = add_loguru_file_sink(_file_handler.stream, level="DEBUG")
+
         # Register the token accumulator as a LangChain callback so every
         # internal LLM call contributes to cost reporting.
         self._token_accumulator = _TokenAccumulator()
+
+        # --- Locate the message action for auto-injection ---
+        # CUGA routes to FinalAnswerAgent (plain text response) instead of calling
+        # the message tool when it finishes.  When a message tool exists (TAU2,
+        # --- Locate terminal action types for auto-injection ---
+        # CUGA always routes through FinalAnswerAgent (plain-text response) on
+        # completion instead of calling the benchmark's terminal tool directly.
+        # We detect this and inject the correct action on CUGA's behalf.
+        #
+        # is_message (e.g. TAU2): conversational tool — inject fires and we loop
+        #   again with the benchmark's reply as the next prompt.
+        # is_finish (e.g. BrowseCompPlus, HotpotQA, GSM8k …): terminal tool —
+        #   inject fires once and we break.  Skipped when max steps were reached.
+
+        # is_message setup
+        _msg_action_type = next((a for a in self.actions if a.is_message), None)
+        _msg_fn: Any = None
+        _msg_tool_name: str | None = None
+        _msg_text_field: str | None = None
+        if _msg_action_type is not None:
+            _mfn_name = _msg_action_type.name.replace(".", "__")
+            _msg_tool_name = _mfn_name.replace("__", "_")
+            _msg_fn = fn_by_name.get(_mfn_name)
+            if _msg_fn is not None:
+                _preferred_fields = ("message", "content", "text", "body")
+                _mfields = _msg_action_type.arguments.model_fields
+                for _fname in _preferred_fields:
+                    if _fname in _mfields:
+                        _msg_text_field = _fname
+                        break
+                if _msg_text_field is None:
+                    for _fname, _finfo in _mfields.items():
+                        _anno = getattr(_finfo.annotation, "__name__", str(_finfo.annotation))
+                        if "str" in _anno.lower():
+                            _msg_text_field = _fname
+                            break
+                if _msg_text_field is None and _mfields:
+                    _msg_text_field = next(iter(_mfields))
+
+        # is_finish setup
+        _finish_action_type = next((a for a in self.actions if a.is_finish), None)
+        _finish_tool_name: str | None = None
+        if _finish_action_type is not None:
+            _ffn_name = _finish_action_type.name.replace(".", "__")
+            _finish_tool_name = _ffn_name.replace("__", "_")
+
         prompt = self._build_prompt()
-        run_sync(
-            agent.invoke(
-                prompt,
-                thread_id=self.session_id,
-                track_tool_calls=True,
-                config={
-                    "configurable": {"shortlisting_tool_threshold": shortlist_threshold},
-                    "callbacks": [self._token_accumulator.handler],
-                },
-            ),
-            timeout=self.invoke_timeout,
+        try:
+            while not self._closed:
+                result = run_sync(
+                    agent.invoke(
+                        prompt,
+                        thread_id=self.session_id,
+                        track_tool_calls=True,
+                        config={
+                            "configurable": {"shortlisting_tool_threshold": shortlist_threshold},
+                            "callbacks": [self._token_accumulator.handler],
+                        },
+                    ),
+                    timeout=self.invoke_timeout,
+                )
+
+                # Determine what CUGA's last tool call was so we can skip
+                # injection when CUGA already called the terminal tool itself.
+                _last_tool_name = (
+                    (result.tool_calls or [])[-1].get("name")
+                    if result.tool_calls
+                    else None
+                )
+                _msg_was_last = _last_tool_name == _msg_tool_name
+                _finish_was_last = _last_tool_name == _finish_tool_name
+
+                if (
+                    not _msg_was_last
+                    and not self._closed
+                    and result.answer
+                    and _msg_fn is not None
+                    and _msg_text_field is not None
+                ):
+                    # TAU2-style: CUGA produced a final-answer text via
+                    # FinalAnswerAgent without calling the message tool.
+                    # Inject a message call so the benchmark receives the
+                    # reply, then loop with the simulator's response.
+                    self.logger.info(
+                        "Auto-injecting message(%s=%r...)",
+                        _msg_text_field,
+                        result.answer[:80],
+                    )
+                    try:
+                        _obs = _msg_fn(**{_msg_text_field: result.answer})
+                    except Exception as _exc:
+                        self.logger.warning("Auto-message injection failed: %s", _exc)
+                        break
+                    if _obs is None:
+                        break
+                    prompt = str(_obs)
+
+                elif (
+                    not _finish_was_last
+                    and not self._closed
+                    and result.answer
+                    and _finish_action_type is not None
+                    and self._turn < self.max_steps
+                ):
+                    # CUGA produced a final answer via FinalAnswerAgent without
+                    # calling the finish tool.  Build and execute the finish
+                    # action on CUGA's behalf, then stop.
+                    self.logger.info(
+                        "Auto-injecting finish action %r (answer=%r...)",
+                        _finish_action_type.name,
+                        result.answer[:80],
+                    )
+                    self._try_inject_finish(result.answer, _finish_action_type)
+                    break
+
+                else:
+                    break
+        finally:
+            remove_loguru_sink(_loguru_sink_id)
+
+    def _try_inject_finish(self, answer: str, action_type: Any) -> None:
+        """Build and execute the finish action using CUGA's FinalAnswerAgent text.
+
+        Extraction is attempted in three stages, from cheapest to most robust:
+
+        1. **Heuristic JSON parsing** — handles the common structured formats
+           CUGA emits (top-level field match, ``{"arguments": {...}}`` nesting).
+        2. **LLM extraction fallback** — when heuristics yield nothing, calls
+           the configured LLM with the raw answer text + the action's JSON schema
+           and asks it to return a matching JSON object.  Handles any format
+           CUGA might produce (nested keys, markdown fences, plain prose, etc.).
+        3. **Plain-string fallback** — fills the first ``str`` field with the
+           raw answer text verbatim, used only when both stages above fail.
+        """
+        import json as _json
+
+        args_cls = action_type.arguments
+        kwargs: dict = {}
+
+        # ── Stage 1: heuristic JSON parsing ──────────────────────────────────
+        try:
+            parsed = _json.loads(answer)
+            if isinstance(parsed, dict):
+                known = set(args_cls.model_fields.keys())
+                # Top-level match (e.g. BrowseCompPlus: {"exact_answer": ..., "confidence": ...})
+                kwargs = {k: v for k, v in parsed.items() if k in known}
+                # Nested match: CUGA sometimes returns {"name": "submit", "arguments": {...}}
+                if not kwargs and isinstance(parsed.get("arguments"), dict):
+                    kwargs = {k: v for k, v in parsed["arguments"].items() if k in known}
+                # Action-name-as-wrapper: {"finish": {"answer": "28 km"}}
+                if not kwargs:
+                    action_name = action_type.name.split(".")[-1]
+                    if isinstance(parsed.get(action_name), dict):
+                        kwargs = {k: v for k, v in parsed[action_name].items() if k in known}
+        except (ValueError, TypeError):
+            pass
+
+        # ── Stage 2: LLM extraction fallback ─────────────────────────────────
+        if not kwargs:
+            kwargs = self._llm_extract_kwargs(answer, action_type)
+
+        # ── Stage 3: plain-string fallback ───────────────────────────────────
+        if not kwargs:
+            for field_name, field_info in args_cls.model_fields.items():
+                anno = getattr(field_info.annotation, "__name__", str(field_info.annotation))
+                if "str" in anno.lower():
+                    kwargs[field_name] = answer
+                    break
+
+        try:
+            args = args_cls(**kwargs)
+            action = action_type.build_action(args)
+            self.execute(action)
+        except Exception as exc:
+            self.logger.warning("Auto-finish injection failed: %s", exc)
+
+    def _llm_extract_kwargs(self, answer: str, action_type: Any) -> dict:
+        """Call the configured LLM to extract action kwargs from free-form text.
+
+        Sends the raw answer string together with the action's JSON schema to
+        the same model used for the main agent run (``self.model_id``).  The
+        model is asked to return a JSON object whose keys match the action's
+        field names.
+
+        This handles any format CUGA might produce — nested wrappers, markdown
+        code fences, prose answers, etc. — without requiring format-specific
+        heuristics.
+
+        Returns an empty dict on any failure (import error, LLM error, invalid
+        JSON, Pydantic validation failure) so the caller can continue to the
+        plain-string fallback.
+        """
+        try:
+            import litellm as _litellm
+        except ImportError:
+            self.logger.debug("litellm not available — skipping LLM extraction fallback")
+            return {}
+
+        args_cls = action_type.arguments
+        known = set(args_cls.model_fields.keys())
+        schema = args_cls.model_json_schema()
+
+        prompt = (
+            "Extract field values from the text below and return a JSON object "
+            "matching the schema. Return ONLY valid JSON — no markdown, no explanation.\n\n"
+            f"Schema:\n{json.dumps(schema, indent=2)}\n\n"
+            f"Text:\n{answer}"
         )
+
+        try:
+            response = _litellm.completion(
+                model=self.model_id,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=256,
+            )
+            raw = (response.choices[0].message.content or "").strip()
+
+            # Strip markdown code fences if the model wrapped its output.
+            if raw.startswith("```"):
+                lines = raw.splitlines()
+                # Drop opening fence (```json or ```) and closing fence (```)
+                inner = lines[1:] if len(lines) > 1 else lines
+                if inner and inner[-1].strip() == "```":
+                    inner = inner[:-1]
+                raw = "\n".join(inner).strip()
+
+            parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                self.logger.debug(
+                    "LLM extraction returned non-dict type %s — skipping", type(parsed).__name__
+                )
+                return {}
+
+            kwargs = {k: v for k, v in parsed.items() if k in known}
+
+            # Validate against the Pydantic model before returning so that an
+            # LLM that returns wrong types doesn't silently pass bad data to
+            # the action builder.
+            args_cls(**kwargs)
+
+            self.logger.info(
+                "LLM extraction succeeded for action %r: %s",
+                action_type.name,
+                list(kwargs.keys()),
+            )
+            return kwargs
+
+        except Exception as exc:
+            self.logger.debug("LLM extraction fallback failed (%s): %s", type(exc).__name__, exc)
+            return {}
 
     def close(self) -> None:
         super().close()
