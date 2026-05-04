@@ -495,8 +495,9 @@ class CUGASDKAgentInstance(CodeAgentInstance):
             pass
 
         # ── Stage 2: LLM extraction fallback ─────────────────────────────────
-        if not kwargs:
-            kwargs = self._llm_extract_kwargs(answer, action_type)
+        # Disabled for now — uncomment to re-enable.
+        # if not kwargs:
+        #     kwargs = self._llm_extract_kwargs(answer, action_type)
 
         # ── Stage 3: plain-string fallback ───────────────────────────────────
         if not kwargs:
