@@ -7,6 +7,8 @@ import hashlib
 import json
 import logging
 import random
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -92,6 +94,9 @@ class Integration(BaseModel):
     entry_point: str
 
 
+_MAX_SCAN_WORKERS = 32
+
+
 class RunStatus(BaseModel):
     """Snapshot of the current run status and existing session artifacts."""
 
@@ -135,6 +140,11 @@ class RunStatus(BaseModel):
         run_config: RunConfig,
         session_configs: list[SessionConfig],
     ) -> RunStatus:
+        """Build a :class:`RunStatus` by scanning each session's artifacts.
+
+        Per-session checks fan out via a ``ThreadPoolExecutor``; ``pool.map``
+        preserves input order so :class:`RunPlan` zips correctly downstream.
+        """
         from ...utils.paths import get_run_paths
 
         context_config = run_config
@@ -151,13 +161,10 @@ class RunStatus(BaseModel):
                 context_config = run_config.model_copy(update=updates)
         with context_config.get_context():
             run_paths = get_run_paths()
-            statuses = [
-                SessionStatus.from_config(
-                    session_config,
-                    run_paths=run_paths,
-                )
-                for session_config in session_configs
-            ]
+            max_workers = max(1, min(_MAX_SCAN_WORKERS, len(session_configs)))
+            scan = partial(SessionStatus.from_config, run_paths=run_paths)
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                statuses = list(pool.map(scan, session_configs))
             task_ids = [str(item.task_id) for item in session_configs]
             completed = sum(1 for item in statuses if item.status == SessionExecutionStatus.COMPLETED)
             running = sum(1 for item in statuses if item.status == SessionExecutionStatus.RUNNING)
